@@ -29,9 +29,12 @@ D =ds[:,0]*L0*2	#Diameters
 Dg=ds[:,1]		#Entrainment distribution
 G = D.size
 turb_data = loadtxt('stern_turbulence.dat',skiprows=18);
-kt  = -1*interp(-1*z,-1*insert(turb_data[:,5]*L0,0,10), -1*insert(turb_data[:,6] ,0,turb_data[0,6] ));
-et  = -1*interp(-1*z,-1*insert(turb_data[:,5]*L0,0,10), -1*insert(turb_data[:,11],0,turb_data[0,11]));
-nut = -1*interp(-1*z,-1*insert(turb_data[:,5]*L0,0,10), -1*insert(turb_data[:,8] ,0,turb_data[0,8] ));
+# kt  = -1*interp(-1*z,-1*insert(turb_data[:,5]*L0,0,10), -1*insert(turb_data[:,6] ,0,turb_data[0,6] ));
+# et  = -1*interp(-1*z,-1*insert(turb_data[:,5]*L0,0,10), -1*insert(turb_data[:,11],0,turb_data[0,11]));
+# nut = -1*interp(-1*z,-1*insert(turb_data[:,5]*L0,0,10), -1*insert(turb_data[:,8] ,0,turb_data[0,8] ));
+kt=zeros(Nx); 	kt[:]  = 1.2346934417890287
+et=zeros(Nx); 	et[:]  = 1.8320709103157145
+nut=zeros(Nx); 	nut[:] = 0.07489538904880445
 for i in range(Nx):
 	if z[i] > 0.5 :
 		nut[i] = nuc
