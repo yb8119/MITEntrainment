@@ -43,7 +43,7 @@ def findcLceta(kt,epsl,nu,mode):
 	if mode==1 : # Direct integral
 		kL=2*pi/L;  keta=2*pi/eta;
 		def TKE_eqn(c1,c2):
-			p1 = quad(Ek,   0,	       kL/100, 	args=(c1,c2,C,L,p0,beta,eta),limit=100)[0]
+			p1 = quad(Ek,   0,	       kL/100,		args=(c1,c2,C,L,p0,beta,eta),limit=100)[0]
 			p2 = quad(Ek,   kL/100,     kL/50,  	args=(c1,c2,C,L,p0,beta,eta),limit=100)[0]
 			p3 = quad(Ek,   kL/50,      kL/25,  	args=(c1,c2,C,L,p0,beta,eta),limit=100)[0]
 			p4 = quad(Ek,   kL/25,      kL/5,   	args=(c1,c2,C,L,p0,beta,eta),limit=100)[0]
@@ -201,10 +201,7 @@ def assemble_matrix(A,z,nut,VT,dt):
 def assemble_rhs(N0,S,dt):
 	Nx= S.size
 	b = N0/dt + S
-	i=0
-	b[i] = 0.0; #zero derivative at i=1
-	
-	i=Nx-1
-	b[i] = 0.0; #zero derivative at i=Nx
+	b[0] = 0.0; #zero derivative at i=0
+	b[Nx-1] = 0.0; #zero derivative at i=Nx-1
 	return b
 ########################################################################################################################
