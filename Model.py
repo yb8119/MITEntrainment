@@ -144,17 +144,19 @@ def Ek_logint(logk,c1,c2,C,L,p0,beta,eta):
 	k=exp(logk)
 	return C*k**(-5.0/3.0)*(k*L/((k*L)**2+c1)**0.5)**(5.0/3.0+p0)*exp(-beta*(((k*eta)**4+c2**4)**0.25-c2))*k
 ####################################################################
-def get_rise_speed(l1,l2,kt,et,nu,cL,cEta,lst,ul2_lst,method):
+# def get_rise_speed(l1,l2,kt,et,nu,cL,cEta,lst,ul2_lst,method):
+def get_rise_speed(l1,l2,kt,et,nu,cL,cEta,method):
 	if l1 > l2:
 		print('==WARNING: Length scale l1 should be smaller than l2!!!===')
 	if method == 1 : # Use second-order longitudinal structure function
 		if l1 == l2:
 			return 0
-		numerator   = quad(ulam_nlam, log(l1), log(l2), args=(kt,et,nu,cL,cEta,lst,ul2_lst,1),limit = 100)[0]
-		denominator = quad(ulam_nlam, log(l1), log(l2), args=(kt,et,nu,cL,cEta,lst,ul2_lst,2),limit = 100)[0]
+		# numerator   = quad(ulam_nlam, log(l1), log(l2), args=(kt,et,nu,cL,cEta,lst,ul2_lst,1),limit = 100)[0]
+		# denominator = quad(ulam_nlam, log(l1), log(l2), args=(kt,et,nu,cL,cEta,lst,ul2_lst,2),limit = 100)[0]
 		# numerator   = quadrature(ulam_nlam_nolog, l1, l2, args=(kt,et,nu,cL,cEta,lst,ul2_lst,1),vec_func=False,maxiter=100)[0]
 		# denominator = quadrature(ulam_nlam_nolog, l1, l2, args=(kt,et,nu,cL,cEta,lst,ul2_lst,2),vec_func=False,maxiter=100)[0]
-		return numerator/denominator
+		# return numerator/denominator
+		return -9999
 	elif method == 2: # Use Energy spectrum
 		L=kt**1.5/et;  eta=(nu**3/et)**0.25
 		C=1.5;	p0=2.0;	beta=5.2
@@ -296,8 +298,8 @@ def Ent_Volume(zp,l,lst,ul2_lst,Reg,Bog,Weg,kt,et,cL,cEta,nu,g,circ_p,Vmax):
 # 	return V_Ent, Fr2_crit, B, F, W, Fr2
 # make sure it is the same as above other than output list
 # This is a jit version
-@jit(nopython=True, cache=True)
-def Ent_Volume_intgrand_jit(logzp,l,lst,ul2_lst,rsp_z_lst,rsp_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab):
+# @jit(nopython=True, cache=True)
+def Ent_Volume_intgrand_jit(logzp,l,kt,et,nu,cL,cEta,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab):
 	zp=exp(logzp)
 	zcoa=-1*zp/(l/2)
 	if zcoa > -4:
@@ -326,8 +328,8 @@ def Ent_Volume_intgrand_jit(logzp,l,lst,ul2_lst,rsp_z_lst,rsp_lst,g,circ_p,Reg,B
 	# Prev Method
 	# ulam_z=sqrt(interp(zp-l/2,lst,ul2_lst)); wz=ulam_z/sqrt(2)
 	# New Method
-	wz=interp(zp,rsp_z_lst,rsp_lst)
-	# wz = get_rise_speed(l,2*zp,kt,et,nu,cL,cEta,lst,ul2_lst,method=2)
+	# wz=interp(zp,rsp_z_lst,rsp_lst)
+	wz = get_rise_speed(l,2*zp,kt,et,nu,cL,cEta,method=2)
 	Fr2=circ_p*wz/(l**2/4*g)
 	# Critical Fr2
 	zcoa_scl=(zcoa-FrXcoefs[7])/FrXcoefs[8]
@@ -356,8 +358,8 @@ def Ent_Volume_intgrand_jit(logzp,l,lst,ul2_lst,rsp_z_lst,rsp_lst,g,circ_p,Reg,B
 		print('WTF?????????')
 	return V_Ent*zp
 ####################################################################
-# @jit(nopython=True, cache=True)
-def J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,rrange,wmeth):
+@jit(nopython=True, cache=True)
+def J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig):
 	#---- Eddy velocity ----#
 	ulamsq=interp(l,lst,ul2_lst)
 	# ulamsq=ulambda_sq(l,kt,et,cL,cEta,nu,pope_spec=1.01)
@@ -379,24 +381,11 @@ def J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,rrange,wmeth):
 	#---- Breakage probability ----#
 	We = rhoc*l*ulamsq/sig #Weber number
 	x = sqrt(2/We)
-	# Risisng speed list
-	nz = 200; rsp_lst=zeros(nz)
-	if rrange > 0:
-		z_st_crt_max=2.5698*rrange	
-		z_st_crt_min=2.5698
-	else:
-		z_st_crt_max=3
-		z_st_crt_min=2
-	zmax=z_st_crt_max*l;	zmin=z_st_crt_min*l
-	rsp_z_lst=logspace(log10(zmin),log10(zmax),nz)
-	for i in range(nz):
-		zp = rsp_z_lst[i]
-		rsp_lst[i]=get_rise_speed(lst[i],2*zp,kt,et,nu,cL,cEta,lst,ul2_lst,wmeth)
-	return ulamsq,rsp_z_lst,rsp_lst,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort
+	return ulamsq,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort
 ####################################################################
-def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange,wmeth):
-	ulamsq,rsp_z_lst,rsp_lst,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=\
-	J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,rrange,wmeth)
+def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange):
+	ulamsq,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=\
+	J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
 	if rrange > 0:
 		z_st_crt_max=2.5698*rrange	
 		z_st_crt_min=2.5698		
@@ -409,15 +398,19 @@ def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange,wmeth):
 	#---- Maximum Entrainment Volume ----#
 	Refitcoefs=Table['Refitcoefs'][0];	FrXcoefs=Table['FrXcoefs'][0]; Fr2_lst=Table['flxfr_data'][0,:]; zoa_lst=Table['z_a_data'][:,0]
 	F_tab=Table['F_lookuptable']
-	# print('=============== l={:.5e}'.format(l))
+	# Ent_Volume_intgrand_jit(logzp,l,kt,et,nu,cL,cEta,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab)
 	V_int=quad(Ent_Volume_intgrand_jit, log(zmin), log(zmax), \
-	           args=(l,lst,ul2_lst,rsp_z_lst,rsp_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab), \
+	           args=(l,kt,et,nu,cL,cEta,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab), \
 	           limit = 100)[0]
 	#---- J_lambda ----#
 	J_lam=n_lam*PB*V_int/tau_vort
 	return J_lam
 ####################################################################
 def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,rrange,wmeth):
+	if (wmeth!=2 and wmeth>0):
+		print('Not working in this mode.')
+		return -1
+
 	cL,cEta=findcLceta(kt,et,nu,mode=1)
 	L=kt**1.5/et
 	x1=sqrt(4*sig/rhoc/g); x2=sqrt(200*sig/rhoc/g); x3=L; x4=10; # Lambda range
@@ -426,12 +419,12 @@ def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,rrange,wmeth):
 	lst=logspace(-8,2,nlst);	ul2_lst=zeros(nlst) #with dimension!
 	for i in range(nlst):
 		ul2_lst[i]=ulambda_sq(lst[i],kt,et,cL,cEta,nu,pope_spec=1.01)
-	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange,wmeth):
-		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange,wmeth)*exp(u)
+	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange):
+		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange)*exp(u)
 	J=quadrature(intgrd,  log(x1), log(x2),
-	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange,wmeth),
+	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange),
 	             vec_func=False,maxiter=51)[0] +\
 	quadrature(intgrd,  log(x2), log(x4),
-	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange,wmeth),
+	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange),
 	            vec_func=False,maxiter=52)[0]
 	return J
