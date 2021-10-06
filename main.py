@@ -1,4 +1,4 @@
-from numpy import zeros, linspace, loadtxt, interp, insert
+from numpy import zeros, linspace, loadtxt, interp, insert, savez
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 from Ent_body import Turb_entrainment
@@ -135,3 +135,14 @@ ax4=fig3.add_subplot(111)
 ax4.plot(z,S4,label='This work',color='red')
 ax4.plot(z,S1,label='Castro et al. (2016)',color='black')
 ax4.legend(); ax4.set_xlim([0,1.5]); ax4.set_xlabel('Depth [m]'); ax4.set_ylabel(r'$S\ \mathrm{[1/s]}$ ')
+
+fo=open("0D_out.npz","wb")
+savez(fo,
+      z=z,
+      alpha_out1=alpha_out1[:,Nt-1],
+      alpha_out4=alpha_out4[:,Nt-1],
+      S4=S4,
+      S1=S1,
+      kt=kt,
+      et=et)
+fo.close()

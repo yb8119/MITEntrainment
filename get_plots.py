@@ -1,5 +1,5 @@
 from numpy import sqrt, logspace, log10, zeros, linspace, pi, interp
-from Model import J_lambda_prep, Ent_Volume, max_entrainement, Ent_rate_prev, get_rise_speed#, Ent_Volume_Z
+from Model import J_lambda_prep, Ent_Volume, max_entrainement, Ent_rate_prev, get_rise_speed, Ent_Volume_Z
 from Utilities import findcLceta, ulambda_sq
 import matplotlib.pyplot as plt
 from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
@@ -132,99 +132,105 @@ Table=loadmat("UoIEntrainment.mat"); color_lst=['black','red','blue','green']
 ##############################################################################
 #====================== Parameters and functions (SDSS) ======================#
 ##############################################################################
-# # nz=200; z_st_crt=2.5698; z_lst=logspace(-3,log10(10),nz); l_lst=z_lst/z_st_crt
-# # Re_out=zeros(nz); B_out=zeros(nz); We_out=zeros(nz); W_out=zeros(nz);
-# # Fr2_out=zeros(nz); F_out=zeros(nz); Fr2c_out=zeros(nz); 
-# # for iz in range(nz):
-# # 	l=l_lst[iz]; zp=z_lst[iz]
-# # 	ulamsq,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
-# # 	Re_out[iz] = Reg; We_out[iz] = Weg
-# # 	V_Ent, Fr2_crit, B, F, W, Fr2= Ent_Volume_Z(zp,l,lst,ul2_lst,kt,et,nu,cL,cEta,g,circ_p,Reg,Bog,Weg,Table,mode=1)
-# # 	Fr2_out[iz] = Fr2; B_out[iz] = B; W_out[iz] = W; F_out[iz] = F; Fr2c_out[iz] = Fr2_crit
-# # fig2=plt.figure(figsize=(7,3),dpi=300); plt.subplots_adjust(wspace=0.55,hspace=0.3)
-# # ax_1=fig2.add_subplot(231)
-# # # ax_1.plot(z_lst,70*z_lst/z_lst,  color='black',linestyle='--',label=r'$\mathrm{Re}_\Gamma=70$');
-# # # ax_1.plot(z_lst,2580*z_lst/z_lst,color='black',linestyle='--',label=r'$\mathrm{Re}_\Gamma=2580$');
-# # ax_1.plot(z_lst,Re_out,color='black');	
-# # ax_1.set_xscale('log'); ax_1.set_yscale('log'); ax_1.set_ylabel(r'$\mathrm{Re}_\Gamma$ [-]'); #ax_1.legend(labelspacing=0.15,borderpad=0.2,handletextpad=0.4)
-# # ax_1.set_xlim([1e-3,10])
-
-# # ax_2=fig2.add_subplot(232)
-# # ax_2.plot(z_lst,We_out,color='black');	
-# # ax_2.set_xscale('log'); ax_2.set_yscale('log'); ax_2.set_ylabel(r'$\mathrm{We}_\Gamma$ [-]');
-# # ax_2.set_xlim([1e-3,10])
-
-# # ax_3=fig2.add_subplot(233)
-# # ax_3.plot(z_lst,Fr2_out,color='black');	
-# # ax_3.set_xscale('log'); ax_3.set_yscale('log'); ax_3.set_ylabel(r'$\mathrm{Fr}^2_\Xi$ [-]');
-# # ax_3.set_xlim([1e-3,10])
-
-# # ax_4=fig2.add_subplot(234)
-# # ax_4.plot(z_lst,B_out,color='black');	
-# # ax_4.set_xscale('log'); ax_4.set_yscale('log'); ax_4.set_xlabel(r"$z'$ [m]"); ax_4.set_ylabel(r"$B\left(\mathrm{Re}_\Gamma,z'/\lambda\right)$ [-]");
-# # ax_4.set_xlim([1e-3,10])
-
-# # ax_5=fig2.add_subplot(235)
-# # ax_5.plot(z_lst,W_out,color='black');	
-# # ax_5.set_xscale('log'); ax_5.set_yscale('log'); ax_5.set_xlabel(r"$z'$ [m]"); ax_5.set_ylabel(r"$W\left(\mathrm{We}_\Gamma\right)$ [-]");
-# # ax_5.set_xlim([1e-3,10])
-
-# # ax_6=fig2.add_subplot(236)
-# # ax_6.plot(z_lst,F_out,color='black');	
-# # ax_6.set_xscale('log'); ax_6.set_yscale('log'); ax_6.set_xlabel(r"$z'$ [m]"); ax_6.set_ylabel(r"$F\left(\mathrm{Fr}^2_\Xi,z'/\lambda\right)$ [-]");
-# # ax_6.set_xlim([1e-3,10])
-# # For program review slides (added few depth)
-# nz=200; nzr = 3; zlr_lst=[2,2.5698,3] #z_st_crt=2.5698; 
-# Re_out=zeros(nz); B_out=zeros((nz,nzr)); We_out=zeros(nz); W_out=zeros(nz)
-# Fr2_out=zeros((nz,nzr)); F_out=zeros((nz,nzr)); Fr2c_out=zeros((nz,nzr))
-# z_lst=logspace(-3,1,nz) 
-# for izlr in range(nzr):
-# 	zlr=zlr_lst[izlr]
-# 	l_lst=z_lst/zlr
-# 	for iz in range(nz):
-# 		l=l_lst[iz]; zp=z_lst[iz]
-# 		ulamsq,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
-# 		Re_out[iz] = Reg; We_out[iz] = Weg
-# 		V_Ent, Fr2_crit, B, F, W, Fr2= Ent_Volume_Z(zp,l,lst,ul2_lst,kt,et,nu,cL,cEta,g,circ_p,Reg,Bog,Weg,Table,mode=1)
-# 		Fr2_out[iz,izlr] = Fr2; B_out[iz,izlr] = B; W_out[iz] = W; F_out[iz,izlr] = F; Fr2c_out[iz,izlr] = Fr2_crit
-# fig2=plt.figure(figsize=(6,6),dpi=300); plt.subplots_adjust(wspace=0.4,hspace=0.23)
-# ax_1=fig2.add_subplot(321)
+# nz=200; z_st_crt=2.5698; z_lst=logspace(-3,log10(10),nz); l_lst=z_lst/z_st_crt
+# Re_out=zeros(nz); B_out=zeros(nz); We_out=zeros(nz); W_out=zeros(nz);
+# Fr2_out=zeros(nz); F_out=zeros(nz); Fr2c_out=zeros(nz); 
+# for iz in range(nz):
+# 	l=l_lst[iz]; zp=z_lst[iz]
+# 	ulamsq,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
+# 	Re_out[iz] = Reg; We_out[iz] = Weg
+# 	V_Ent, Fr2_crit, B, F, W, Fr2= Ent_Volume_Z(zp,l,lst,ul2_lst,kt,et,nu,cL,cEta,g,circ_p,Reg,Bog,Weg,Table,mode=1)
+# 	Fr2_out[iz] = Fr2; B_out[iz] = B; W_out[iz] = W; F_out[iz] = F; Fr2c_out[iz] = Fr2_crit
+# fig2=plt.figure(figsize=(7,3),dpi=300); plt.subplots_adjust(wspace=0.55,hspace=0.3)
+# ax_1=fig2.add_subplot(231)
 # # ax_1.plot(z_lst,70*z_lst/z_lst,  color='black',linestyle='--',label=r'$\mathrm{Re}_\Gamma=70$');
 # # ax_1.plot(z_lst,2580*z_lst/z_lst,color='black',linestyle='--',label=r'$\mathrm{Re}_\Gamma=2580$');
 # ax_1.plot(z_lst,Re_out,color='black');	
 # ax_1.set_xscale('log'); ax_1.set_yscale('log'); ax_1.set_ylabel(r'$\mathrm{Re}_\Gamma$ [-]'); #ax_1.legend(labelspacing=0.15,borderpad=0.2,handletextpad=0.4)
 # ax_1.set_xlim([1e-3,10])
 
-# ax_2=fig2.add_subplot(323)
+# ax_2=fig2.add_subplot(232)
 # ax_2.plot(z_lst,We_out,color='black');	
 # ax_2.set_xscale('log'); ax_2.set_yscale('log'); ax_2.set_ylabel(r'$\mathrm{We}_\Gamma$ [-]');
 # ax_2.set_xlim([1e-3,10])
 
-# ax_3=fig2.add_subplot(325)
-# for izlr in range(nzr):
-# 	zlr=zlr_lst[izlr]
-# 	ax_3.plot(z_lst,Fr2_out[:,izlr],color=color_lst[izlr],label='{:g}'.format(zlr))
-# ax_3.set_xscale('log'); ax_3.set_yscale('log'); ax_3.set_ylabel(r'$\mathrm{Fr}^2_\Xi$ [-]'); ax_3.set_xlabel(r"$z'$ [m]"); 
-# ax_3.set_xlim([1e-3,10]); ax_3.legend(title=r"$z'/\lambda$",labelspacing=0.15,borderpad=0.2,handletextpad=0.2)
+# ax_3=fig2.add_subplot(233)
+# ax_3.plot(z_lst,Fr2_out,color='black');	
+# ax_3.set_xscale('log'); ax_3.set_yscale('log'); ax_3.set_ylabel(r'$\mathrm{Fr}^2_\Xi$ [-]');
+# ax_3.set_xlim([1e-3,10])
 
-# ax_4=fig2.add_subplot(322)
-# for izlr in range(nzr):
-# 	zlr=zlr_lst[izlr]
-# 	ax_4.plot(z_lst,B_out[:,izlr],color=color_lst[izlr],label='{:g}'.format(zlr))
-# ax_4.set_xscale('log'); ax_4.set_yscale('log'); ax_4.set_ylabel(r"$B\left(\mathrm{Re}_\Gamma,z'/\lambda\right)$ [-]");
-# ax_4.set_xlim([1e-3,10]); ax_4.legend(title=r"$z'/\lambda$",labelspacing=0.15,borderpad=0.2,handletextpad=0.2)
+# ax_4=fig2.add_subplot(234)
+# ax_4.plot(z_lst,B_out,color='black');	
+# ax_4.set_xscale('log'); ax_4.set_yscale('log'); ax_4.set_xlabel(r"$z'$ [m]"); ax_4.set_ylabel(r"$B\left(\mathrm{Re}_\Gamma,z'/\lambda\right)$ [-]");
+# ax_4.set_xlim([1e-3,10])
 
-# ax_5=fig2.add_subplot(324)
+# ax_5=fig2.add_subplot(235)
 # ax_5.plot(z_lst,W_out,color='black');	
-# ax_5.set_xscale('log'); ax_5.set_yscale('log'); ax_5.set_ylabel(r"$W\left(\mathrm{We}_\Gamma\right)$ [-]");
+# ax_5.set_xscale('log'); ax_5.set_yscale('log'); ax_5.set_xlabel(r"$z'$ [m]"); ax_5.set_ylabel(r"$W\left(\mathrm{We}_\Gamma\right)$ [-]");
 # ax_5.set_xlim([1e-3,10])
 
-# ax_6=fig2.add_subplot(326)
-# for izlr in range(nzr):
-# 	zlr=zlr_lst[izlr]
-# 	ax_6.plot(z_lst,F_out[:,izlr],color=color_lst[izlr],label='{:g}'.format(zlr))
+# ax_6=fig2.add_subplot(236)
+# ax_6.plot(z_lst,F_out,color='black');	
 # ax_6.set_xscale('log'); ax_6.set_yscale('log'); ax_6.set_xlabel(r"$z'$ [m]"); ax_6.set_ylabel(r"$F\left(\mathrm{Fr}^2_\Xi,z'/\lambda\right)$ [-]");
-# ax_6.set_xlim([1e-3,10]); ax_6.legend(title=r"$z'/\lambda$",labelspacing=0.15,borderpad=0.2,handletextpad=0.2)
+# ax_6.set_xlim([1e-3,10])
+# For program review slides (added few depth)
+nz=200; nzr = 3; zlr_lst=[2,2.5698,3] #z_st_crt=2.5698; 
+Re_out=zeros(nz); B_out=zeros((nz,nzr)); We_out=zeros(nz); W_out=zeros(nz)
+Fr2_out=zeros((nz,nzr)); F_out=zeros((nz,nzr)); Fr2c_out=zeros((nz,nzr))
+z_lst=logspace(-3,1,nz) 
+for izlr in range(nzr):
+	zlr=zlr_lst[izlr]
+	l_lst=z_lst/zlr
+	for iz in range(nz):
+		l=l_lst[iz]; zp=z_lst[iz]
+		ulamsq,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
+		Re_out[iz] = Reg; We_out[iz] = Weg
+		# V_Ent, Fr2_crit, B, F, W, Fr2= Ent_Volume_Z(zp,l,lst,ul2_lst,kt,et,nu,cL,cEta,g,circ_p,Reg,Bog,Weg,Table,mode=1)
+		(B, tmp, tmp,
+		 W, tmp,
+		 F, tmp, tmp)=\
+		Calc_Para_Func(depth_lst[i],lam_lst[i],lst,ul2_lst,rhoc,
+		               sig,kt,et,nu,cL,cEta,g,
+		               Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab)
+		Fr2_out[iz,izlr] = Fr2; B_out[iz,izlr] = B; W_out[iz] = W; F_out[iz,izlr] = F; Fr2c_out[iz,izlr] = Fr2_crit
+fig2=plt.figure(figsize=(6,6),dpi=300); plt.subplots_adjust(wspace=0.4,hspace=0.23)
+ax_1=fig2.add_subplot(321)
+# ax_1.plot(z_lst,70*z_lst/z_lst,  color='black',linestyle='--',label=r'$\mathrm{Re}_\Gamma=70$');
+# ax_1.plot(z_lst,2580*z_lst/z_lst,color='black',linestyle='--',label=r'$\mathrm{Re}_\Gamma=2580$');
+ax_1.plot(z_lst,Re_out,color='black');	
+ax_1.set_xscale('log'); ax_1.set_yscale('log'); ax_1.set_ylabel(r'$\mathrm{Re}_\Gamma$ [-]'); #ax_1.legend(labelspacing=0.15,borderpad=0.2,handletextpad=0.4)
+ax_1.set_xlim([1e-3,10])
+
+ax_2=fig2.add_subplot(323)
+ax_2.plot(z_lst,We_out,color='black');	
+ax_2.set_xscale('log'); ax_2.set_yscale('log'); ax_2.set_ylabel(r'$\mathrm{We}_\Gamma$ [-]');
+ax_2.set_xlim([1e-3,10])
+
+ax_3=fig2.add_subplot(325)
+for izlr in range(nzr):
+	zlr=zlr_lst[izlr]
+	ax_3.plot(z_lst,Fr2_out[:,izlr],color=color_lst[izlr],label='{:g}'.format(zlr))
+ax_3.set_xscale('log'); ax_3.set_yscale('log'); ax_3.set_ylabel(r'$\mathrm{Fr}^2_\Xi$ [-]'); ax_3.set_xlabel(r"$z'$ [m]"); 
+ax_3.set_xlim([1e-3,10]); ax_3.legend(title=r"$z'/\lambda$",labelspacing=0.15,borderpad=0.2,handletextpad=0.2)
+
+ax_4=fig2.add_subplot(322)
+for izlr in range(nzr):
+	zlr=zlr_lst[izlr]
+	ax_4.plot(z_lst,B_out[:,izlr],color=color_lst[izlr],label='{:g}'.format(zlr))
+ax_4.set_xscale('log'); ax_4.set_yscale('log'); ax_4.set_ylabel(r"$B\left(\mathrm{Re}_\Gamma,z'/\lambda\right)$ [-]");
+ax_4.set_xlim([1e-3,10]); ax_4.legend(title=r"$z'/\lambda$",labelspacing=0.15,borderpad=0.2,handletextpad=0.2)
+
+ax_5=fig2.add_subplot(324)
+ax_5.plot(z_lst,W_out,color='black');	
+ax_5.set_xscale('log'); ax_5.set_yscale('log'); ax_5.set_ylabel(r"$W\left(\mathrm{We}_\Gamma\right)$ [-]");
+ax_5.set_xlim([1e-3,10])
+
+ax_6=fig2.add_subplot(326)
+for izlr in range(nzr):
+	zlr=zlr_lst[izlr]
+	ax_6.plot(z_lst,F_out[:,izlr],color=color_lst[izlr],label='{:g}'.format(zlr))
+ax_6.set_xscale('log'); ax_6.set_yscale('log'); ax_6.set_xlabel(r"$z'$ [m]"); ax_6.set_ylabel(r"$F\left(\mathrm{Fr}^2_\Xi,z'/\lambda\right)$ [-]");
+ax_6.set_xlim([1e-3,10]); ax_6.legend(title=r"$z'/\lambda$",labelspacing=0.15,borderpad=0.2,handletextpad=0.2)
 ##############################################################################
 #=============== Parameters and functions (constant z/lambda) ===============#
 ##############################################################################

@@ -1,0 +1,8 @@
+*.lay
+*.txt
+*.png
+*.dat
+*.npz
+*.m
+*.exe
+__pycache__/
