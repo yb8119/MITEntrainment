@@ -2,7 +2,7 @@ from numpy import interp, sqrt, pi
 from numba import jit
 from Model import get_rise_speed
 # @jit(nopython=True, cache=True)
-def Calc_Para_Func(zp,l,lst,ul2_lst,rhoc,sig,kt,et,nu,cL,cEta,g,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab):
+def Calc_Para_Func(zp,l,lst,ul2_lst,rhoc,sig,kt,et,nu,cL,cEta,g,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zl_min,zl_max):
 ######### Calculating Vortex properties #########
 	#---- Eddy velocity ----#
 	ulamsq=interp(l,lst,ul2_lst);	ulam=sqrt(ulamsq)
@@ -14,10 +14,10 @@ def Calc_Para_Func(zp,l,lst,ul2_lst,rhoc,sig,kt,et,nu,cL,cEta,g,Refitcoefs,FrXco
 	Reg=circ_p/nu;	Weg=circ_p**2*rhoc/(0.5*l*sig);	Bog=g*(l/2)**2/(sig/rhoc)
 
 	zcoa=-1*zp/(l/2)
-	if zcoa > -4:
-		zcoa=-4
-	elif zcoa<-6:
-		zcoa=-6
+	if zcoa > -2*zl_min:
+		zcoa=-2*zl_min
+	elif zcoa<-2*zl_max:
+		zcoa=-2*zl_max
 	# ===== Reynolds number dependence =====
 	b=Refitcoefs[1]+Refitcoefs[4]*zcoa
 	a=Refitcoefs[3]
@@ -41,8 +41,26 @@ def Calc_Para_Func(zp,l,lst,ul2_lst,rhoc,sig,kt,et,nu,cL,cEta,g,Refitcoefs,FrXco
 	Fr2=circ_p*wz/(l**2/4*g)
 	# Critical Fr2
 	zcoa_scl=(zcoa-FrXcoefs[7])/FrXcoefs[8]
-	Fr2_crit=FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
-	FrXcoefs[3]*zcoa_scl**3+FrXcoefs[4]*zcoa_scl**2+FrXcoefs[5]*zcoa_scl + FrXcoefs[6]
+	# Linear extrapolation
+	if(zcoa <= -6):
+		zcoa_lim=(-6-FrXcoefs[7])/FrXcoefs[8]
+	elif(zcoa >= -4):
+		zcoa_lim=(-4-FrXcoefs[7])/FrXcoefs[8]
+	if(zcoa<=-6 or zcoa>=-4):
+		dzcoa = zcoa_scl-zcoa_lim
+		Fr2_crt_lim = FrXcoefs[0]*zcoa_lim**6+FrXcoefs[1]*zcoa_lim**5+FrXcoefs[2]*zcoa_lim**4+\
+					  FrXcoefs[3]*zcoa_lim**3+FrXcoefs[4]*zcoa_lim**2+FrXcoefs[5]*zcoa_lim + FrXcoefs[6]
+		# >>>> Linear extrapolation
+		Fr2_crit = Fr2_crt_lim+(FrXcoefs[0]*zcoa_lim**5*6+FrXcoefs[1]*zcoa_lim**4*5+FrXcoefs[2]*zcoa_lim**3*4+\
+				   FrXcoefs[3]*zcoa_lim**2*3+FrXcoefs[4]*zcoa_lim*2+FrXcoefs[5])*dzcoa
+		# >>>> Polynomial extrapolation
+		# Fr2_crit=FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
+		# FrXcoefs[3]*zcoa_scl**3+FrXcoefs[4]*zcoa_scl**2+FrXcoefs[5]*zcoa_scl + FrXcoefs[6]
+	else:
+		Fr2_crit=FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
+		FrXcoefs[3]*zcoa_scl**3+FrXcoefs[4]*zcoa_scl**2+FrXcoefs[5]*zcoa_scl + FrXcoefs[6]
+	# if abs(l-100) < 1e-6 :
+		# print("zcoa_scl: {:.3e}, Fr2_crit: {:.3e}, zcoa: {:.3e}, zp: {:.3e}".format(zcoa_scl,Fr2_crit,zcoa,zp))
 	if Fr2 < Fr2_crit:
 		F=0
 	else:

@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.integrate import quad
 from scipy.optimize  import fsolve
-from numpy import sin, cos, pi, sqrt
+from scipy.interpolate import RectBivariateSpline
+from numpy import sin, cos, pi, sqrt, interp, zeros
 from numba import jit, float64
 ########################################################################################################################
 def get_ug(d,rhoc,rhod,sig,nu,alphac):
@@ -163,39 +164,42 @@ def ulambda_sq(l,kt,epsl,cL,cEta,nu,pope_spec):
 	else:
 		return 2*(epsl*l)**(2.0/3.0)
 ########################################################################################################################
-def assemble_matrix(A,z,nut,VT,dt):
-                  
-	Nx= z.size
-	i=0
-	A[i,i] = 1.0; A[i,i+1] = -1.0
-	for i in range(1,Nx-1):
-	    
-	    A[i,i-1] = 0.0;A[i,i+1] = 0.0;A[i,i] = 0.0
-	    
-	    hi = (z[i+1]-z[i-1])/2.0
-	    hp = z[i+1]-z[i]
-	    hm = z[i]-z[i-1]    
-	    
-	    nut_m = 0.5*(nut[i-1]+nut[i])
-	    nut_p = 0.5*(nut[i+1]+nut[i])
-	    
-	    #Diffusion term
-	    A[i,i-1] = -nut_m/hi/hm
-	    A[i,i]   =  1.0/hi*(nut_m/hm+nut_p/hp)
-	    A[i,i+1] = -nut_p/hi/hp
-	    
-	    #Convection term [assumes rising velocity, u<0]
-	    A[i,i]   = A[i,i] + VT/hp
-	    A[i,i+1] = A[i,i+1] - VT/hp
-	    
-	    #Temporal term
-	    A[i,i]   = A[i,i] + 1.0/dt
-	    
-	    #RHS
-	    #b[i] = N0[i]/dt + S[i];
-	    
-	i=Nx-1
-	A[i,i] = 1.0; A[i,i-1] = -1.0 #b(i) = 0.0; %zero derivative
+def assemble_matrix(A, z, nut, VT, dt):
+	Nx = z.size
+	i = 0
+	A[i, i] = 1.0
+	A[i, i+1] = -1.0
+	for i in range(1, Nx-1):
+		
+		A[i, i-1] = 0.0
+		A[i, i+1] = 0.0
+		A[i, i] = 0.0
+		
+		hi = (z[i+1]-z[i-1])/2.0
+		hp = z[i+1]-z[i]
+		hm = z[i]-z[i-1]
+		
+		nut_m = 0.5*(nut[i-1]+nut[i])
+		nut_p = 0.5*(nut[i+1]+nut[i])
+		
+		#Diffusion term
+		A[i, i-1] = -nut_m/hi/hm
+		A[i, i] = 1.0/hi*(nut_m/hm+nut_p/hp)
+		A[i, i+1] = -nut_p/hi/hp
+		
+		#Convection term [assumes rising velocity, u<0]
+		A[i, i] = A[i, i] + VT/hp
+		A[i, i+1] = A[i, i+1] - VT/hp
+		
+		#Temporal term
+		A[i, i] = A[i, i] + 1.0/dt
+		
+		#RHS
+		#b[i] = N0[i]/dt + S[i];
+		
+		i = Nx-1
+		A[i, i] = 1.0
+		A[i, i-1] = -1.0  # b(i) = 0.0; %zero derivative
 	return A
 ########################################################################################################################
 def assemble_rhs(N0,S,dt):
@@ -205,3 +209,49 @@ def assemble_rhs(N0,S,dt):
 	b[Nx-1] = 0.0; #zero derivative at i=Nx-1
 	return b
 ########################################################################################################################
+# @jit(nopython=True, cache=True)
+def F_func_table_ext(Fr2_lst,Fr2_tgt,zoa_lst,zoa_tgt,F_tab,method):
+	d1  = zoa_tgt.size-1;	d2  = Fr2_tgt.size-1
+	d1o = zoa_lst.size-1;	d2o = Fr2_lst.size-1
+	F_tab_out=zeros((d1+1,d2+1))
+	if method == "Linear Exrapolation":
+		# z_a_data goes from -6 to -4; flxfr_data goes from 0 to 4
+		# extrapolate zoa dimension first 
+		for iz in range(d1+1):
+			izcoa=-1; zcoa = zoa_tgt[iz]
+			if zcoa >= zoa_lst[d1o-1]:
+				izcoa=d1o-1; zcoa_lw=(zoa_lst[d1o]-zcoa)/(zoa_lst[d1o]-zoa_lst[d1o-1]); 
+			elif zcoa <= zoa_lst[0]:
+				izcoa=0; 	zcoa_lw=(zoa_lst[1] -zcoa)/(zoa_lst[1] -zoa_lst[0]); 
+			if izcoa == -1: #within the range
+				for i in range(d1o):
+					if zcoa>=zoa_lst[i] and zcoa<zoa_lst[i+1]:
+						izcoa=i; zcoa_lw=(zoa_lst[i+1]-zcoa)/(zoa_lst[i+1]-zoa_lst[i])
+			if izcoa == -1:
+				print('Sthg is very wrong(zcoa), {}, {}'.format(izcoa, zcoa_lw))
+			F_lst=F_tab[izcoa,:]*zcoa_lw+F_tab[izcoa+1,:]*(1-zcoa_lw)
+			# F=interp(Fr2,Fr2_lst,F_lst)
+			for jf in range(d2+1):
+				jfr=-1; Fr2 = Fr2_tgt[jf]
+				if Fr2 >= Fr2_lst[d2o-1]:
+					jfr=d2o-1; fr2_lw=(Fr2_lst[d2o]-Fr2)/(Fr2_lst[d2o]-Fr2_lst[d2o-1]); 
+				elif Fr2 <= Fr2_lst[0]:
+					jfr=0; 	fr2_lw=(Fr2_lst[1] -Fr2)/(Fr2_lst[1] -Fr2_lst[0]); 
+				if jfr == -1: #within the range
+					for i in range(len(Fr2_lst)-1):
+						if Fr2>=Fr2_lst[i] and Fr2<Fr2_lst[i+1]:
+							jfr=i; fr2_lw=(Fr2_lst[i+1]-Fr2)/(Fr2_lst[i+1]-Fr2_lst[i])
+				if jfr == -1:
+					print('Sthg is very wrong (Fr2)')
+				F_tab_out[iz,jf]=max(0.0,F_lst[jfr]*fr2_lw+F_lst[jfr+1]*(1-fr2_lw))
+	elif method == "Nearest Point":
+		# RectBivariateSpline use nearest point by default.
+		X = zoa_lst
+		Y = Fr2_lst
+		f = RectBivariateSpline(X, Y, F_tab)
+		for i in range(d1+1):
+			for j in range(d2+1):
+				F_tab_out[i,j] = f(zoa_tgt[i],Fr2_tgt[j])
+	else:
+		print("ERROR: Wrong method parameter involked!")
+	return F_tab_out

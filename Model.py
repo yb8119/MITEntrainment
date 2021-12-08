@@ -1,12 +1,10 @@
-from numpy import sqrt, exp, log, pi, logspace, zeros, log10, mod, floor, interp, linspace, flip
+from numpy import sqrt, exp, log, pi, logspace, zeros, log10, interp, linspace
 from scipy.special import erfc
-from scipy.integrate import quad, quadrature, trapezoid
-#from scipy.optimize import fsolve
-from scipy.interpolate import interp2d
+from scipy.integrate import quad, quadrature
 from Utilities import findcLceta, ulambda_sq
 import matplotlib.pyplot as plt
-from numba import jit, float64
-#import sys
+from numba import jit
+from time import process_time
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams["mathtext.fontset"] = "stix"
 #==============================================#
@@ -107,11 +105,10 @@ def Ent_rate_prev(ell,zp,kt,et):
 	Ds=Ds_div_ze(zp/ze)*ze
 	Q=Sl0*uell**3*ell**3/g/ze**2*(ze/zp)**3*Ds_div_ze(zp/ze)
 	return Q, ze
-
 #==============================================#
 #                   New Model
 #==============================================#
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, nogil=True)
 def ulam_nlam(logl,kt,et,nu,cL,cEta,lst,ul2_lst,output):
 	l=exp(logl)
 	ulamsq=interp(l,lst,ul2_lst)
@@ -125,7 +122,7 @@ def ulam_nlam(logl,kt,et,nu,cL,cEta,lst,ul2_lst,output):
 		return sqrt(ulamsq)*n_lam * l
 	elif output == 2: #denominator
 		return n_lam * l
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, nogil=True)
 def ulam_nlam_nolog(l,kt,et,nu,cL,cEta,lst,ul2_lst,output):
 	ulamsq=interp(l,lst,ul2_lst)
 	C=1.5;	p0=2.0;   be=5.2; k=2*pi/l
@@ -139,26 +136,27 @@ def ulam_nlam_nolog(l,kt,et,nu,cL,cEta,lst,ul2_lst,output):
 	elif output == 2: #denominator
 		return n_lam
 ####################################################################
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, nogil=True)
 def Ek_logint(logk,c1,c2,C,L,p0,beta,eta,et):
 	k=exp(logk)
 	return C*et**(2/3)*k**(-5.0/3.0)*(k*L/((k*L)**2+c1)**0.5)**(5.0/3.0+p0)*exp(-beta*(((k*eta)**4+c2**4)**0.25-c2))*k
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, nogil=True)
 def Ek_int(k,c1,c2,C,L,p0,beta,eta,et):
 	return C*et**(2/3)*k**(-5.0/3.0)*(k*L/((k*L)**2+c1)**0.5)**(5.0/3.0+p0)*exp(-beta*(((k*eta)**4+c2**4)**0.25-c2))
 ####################################################################
 # def get_rise_speed(l1,l2,kt,et,nu,cL,cEta,lst,ul2_lst,method):
 def get_rise_speed(l1,l2,kt,et,nu,cL,cEta,method):
 	if l1 > l2:
-		print('==WARNING: Length scale l1 should be smaller than l2!!!===')
+		# print('==WARNING: Length scale l1 should be smaller than l2!!!===')
+		return 0
 	if method == 1 : # Use second-order longitudinal structure function
 		if l1 == l2:
 			return 0
-		# numerator   = quad(ulam_nlam, log(l1), log(l2), args=(kt,et,nu,cL,cEta,lst,ul2_lst,1),limit = 100)[0]
-		# denominator = quad(ulam_nlam, log(l1), log(l2), args=(kt,et,nu,cL,cEta,lst,ul2_lst,2),limit = 100)[0]
-		# numerator   = quadrature(ulam_nlam_nolog, l1, l2, args=(kt,et,nu,cL,cEta,lst,ul2_lst,1),vec_func=False,maxiter=100)[0]
-		# denominator = quadrature(ulam_nlam_nolog, l1, l2, args=(kt,et,nu,cL,cEta,lst,ul2_lst,2),vec_func=False,maxiter=100)[0]
-		# return numerator/denominator
+			# numerator   = quad(ulam_nlam, log(l1), log(l2), args=(kt,et,nu,cL,cEta,lst,ul2_lst,1),limit = 100)[0]
+			# denominator = quad(ulam_nlam, log(l1), log(l2), args=(kt,et,nu,cL,cEta,lst,ul2_lst,2),limit = 100)[0]
+			# numerator   = quadrature(ulam_nlam_nolog, l1, l2, args=(kt,et,nu,cL,cEta,lst,ul2_lst,1),vec_func=False,maxiter=100)[0]
+			# denominator = quadrature(ulam_nlam_nolog, l1, l2, args=(kt,et,nu,cL,cEta,lst,ul2_lst,2),vec_func=False,maxiter=100)[0]
+			# return numerator/denominator
 		return -9999
 	elif method == 2: # Use Energy spectrum
 		L=kt**1.5/et;  eta=(nu**3/et)**0.25
@@ -166,12 +164,11 @@ def get_rise_speed(l1,l2,kt,et,nu,cL,cEta,method):
 
 		# p1 = quadrature(Ek, 2*pi/l2, 2*pi/l1, args=(cL,cEta,C,L,p0,beta,eta),vec_func=False,maxiter=100)[0]
 		# p1 = quad(Ek, 2*pi/l2, 2*pi/l1, args=(cL,cEta,C,L,p0,beta,eta),limit = 100)[0]
-		p1 = quad(Ek_logint, log(2*pi/l2), log(2*pi/l1), args=(cL,cEta,C,L,p0,beta,eta,et),limit = 100)[0]
-
+		p1 = quad(Ek_logint, log(2*pi/l2), log(2*pi/l1), args=(cL,cEta,C,L,p0,beta,eta,et),limit = 100,epsrel = 1e-5)[0]
 		p1 = (p1 *2.0/3.0)**(0.5)
 		return p1
 ####################################################################
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, nogil=True)
 def max_entrainement(l,ulamsq,kt,et,cL,cEta,nu,g,rhoc,sig):
 	# ulamsq=ulambda_sq(l,kt,et,cL,cEta,nu,pope_spec=1.01)
 	# def E_ent_intgrand(d):
@@ -197,7 +194,7 @@ def max_entrainement(l,ulamsq,kt,et,cL,cEta,nu,g,rhoc,sig):
 ####################################################################
 #           Single depth version (z_c=3\lambda)
 ####################################################################
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, nogil=True)
 def Ent_Volume(zp,l,lst,ul2_lst,Reg,Bog,Weg,kt,et,cL,cEta,nu,g,circ_p,Vmax):
 	if Reg<70:
 		B=0
@@ -225,15 +222,10 @@ def Ent_Volume(zp,l,lst,ul2_lst,Reg,Bog,Weg,kt,et,cL,cEta,nu,g,circ_p,Vmax):
 ####################################################################
 #           Multiple depth version (z_c=3\lambda)
 ####################################################################
-# def Ent_Volume_intgrand_jit(logzp,l,kt,et,nu,cL,cEta,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab):
-@jit(nopython=True, cache=True)
-def Ent_Volume_intgrand_jit(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab):
+@jit(nopython=True, cache=True, nogil=True)
+def Ent_Volume_intgrand_jit(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zoa_lst,F_tab,F_tab_NP):
 	zp=exp(logzp)
 	zcoa=-1*zp/(l/2)
-	if zcoa > -4:
-		zcoa=-4
-	elif zcoa<-6:
-		zcoa=-6
 	# ===== Reynolds number dependence =====
 	b=Refitcoefs[1]+Refitcoefs[4]*zcoa
 	a=Refitcoefs[3]
@@ -252,102 +244,37 @@ def Ent_Volume_intgrand_jit(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoef
 	else:
 		W=1
 	# ===== Friude number dependence =====
-	# Rise velocity
-	# Prev Method
-	# ulam_z=sqrt(interp(zp-l/2,lst,ul2_lst)); wz=ulam_z/sqrt(2)
 	# New Method
 	wz=interp(zp,zp_lst,wz_lst)
 	# wz = get_rise_speed(l,2*zp,kt,et,nu,cL,cEta,method=2)
 	Fr2=circ_p*wz/(l**2/4*g)
-	# Critical Fr2
-	zcoa_scl=(zcoa-FrXcoefs[7])/FrXcoefs[8]
-	Fr2_crit=FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
-	FrXcoefs[3]*zcoa_scl**3+FrXcoefs[4]*zcoa_scl**2+FrXcoefs[5]*zcoa_scl + FrXcoefs[6]
-	if Fr2 < Fr2_crit:
-		F=0
-	else:
-		# z_a_data goes from -6 to -4; flxfr_data goes from 0 to 4
-		izcoa=-1
+	izcoa=-1
+	if not(F_tab_NP): # Using linear extrapolated table, must probe inside range
+		if zcoa > max(zoa_lst):
+			print ("zoa_lst out of range error!!")
+		elif zcoa < min(zoa_lst):
+			print ("zoa_lst out of range error!!")
+	else: #  Performing N-P extrapolation (cap) for the table (takes in the original table)
 		if zcoa >= max(zoa_lst):
 			izcoa=len(zoa_lst)-2; zcoa_lw=0; 
 		elif zcoa <= min(zoa_lst):
 			izcoa=0; 			zcoa_lw=1; 
-		if izcoa == -1:
-			for i in range(len(zoa_lst)-1):
-				if zcoa>=zoa_lst[i] and zcoa<zoa_lst[i+1]:
-					izcoa=i; zcoa_lw=(zoa_lst[i+1]-zcoa)/(zoa_lst[i+1]-zoa_lst[i])
-		if izcoa == -1 or zcoa_lw>1 or zcoa_lw<0:
-			print('Sthg is very wrong')
-		F_lst=F_tab[izcoa,:]*zcoa_lw+F_tab[izcoa+1,:]*(1-zcoa_lw)
-		F=interp(Fr2,Fr2_lst,F_lst)
-		F=max(0.0,F)
+	if izcoa == -1:
+		for i in range(len(zoa_lst)-1):
+			if zcoa>=zoa_lst[i] and zcoa<zoa_lst[i+1]:
+				izcoa=i; zcoa_lw=(zoa_lst[i+1]-zcoa)/(zoa_lst[i+1]-zoa_lst[i])
+	if izcoa == -1 or zcoa_lw>1 or zcoa_lw<0:
+		print('Sthg is very wrong')
+	F_lst=F_tab[izcoa,:]*zcoa_lw+F_tab[izcoa+1,:]*(1-zcoa_lw)
+	F=interp(Fr2,Fr2_lst,F_lst)
+	F=max(0.0,F)
 	V_Ent=pi*l**3/6.0*F*B*W
 	# print("F,B,W:{:.3e}, {:.3e}, {:.3e}".format(F,B,W))
 	if V_Ent < 0:
 		print('WTF?????????')
 	return V_Ent*zp
 ####################################################################
-def Ent_Volume_intgrand_jit_dbg(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab):
-	zp=exp(logzp)
-	zcoa=-1*zp/(l/2)
-	if zcoa > -4:
-		zcoa=-4
-	elif zcoa<-6:
-		zcoa=-6
-	# ===== Reynolds number dependence =====
-	b=Refitcoefs[1]+Refitcoefs[4]*zcoa
-	a=Refitcoefs[3]
-	if Reg < -b/2/a:
-		B=Refitcoefs[0] + Refitcoefs[1]*Reg + Refitcoefs[2]*zcoa + \
-		Refitcoefs[3]*Reg**2 + Refitcoefs[4]*Reg*zcoa
-	else:
-		B=Refitcoefs[0] + Refitcoefs[1]*(-b/2/a) + Refitcoefs[2]*zcoa + \
-		Refitcoefs[3]*(-b/2/a)**2 + Refitcoefs[4]*(-b/2/a)*zcoa
-	B=max(0.0,B)
-	# ===== Weber number dependence =====
-	if Bog<1:
-		W=0
-	elif Bog<50:
-		W=1.5e-2+8.1e-5*Weg
-	else:
-		W=1
-	# ===== Friude number dependence =====
-	# Rise velocity
-	# Prev Method
-	# ulam_z=sqrt(interp(zp-l/2,lst,ul2_lst)); wz=ulam_z/sqrt(2)
-	# New Method
-	wz=interp(zp,zp_lst,wz_lst)
-	# wz = get_rise_speed(l,2*zp,kt,et,nu,cL,cEta,method=2)
-	Fr2=circ_p*wz/(l**2/4*g)
-	# Critical Fr2
-	zcoa_scl=(zcoa-FrXcoefs[7])/FrXcoefs[8]
-	Fr2_crit=FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
-	FrXcoefs[3]*zcoa_scl**3+FrXcoefs[4]*zcoa_scl**2+FrXcoefs[5]*zcoa_scl + FrXcoefs[6]
-	if Fr2 < Fr2_crit:
-		F=0
-	else:
-		# z_a_data goes from -6 to -4; flxfr_data goes from 0 to 4
-		izcoa=-1
-		if zcoa >= max(zoa_lst):
-			izcoa=len(zoa_lst)-2; zcoa_lw=0; 
-		elif zcoa <= min(zoa_lst):
-			izcoa=0; 			zcoa_lw=1; 
-		if izcoa == -1:
-			for i in range(len(zoa_lst)-1):
-				if zcoa>=zoa_lst[i] and zcoa<zoa_lst[i+1]:
-					izcoa=i; zcoa_lw=(zoa_lst[i+1]-zcoa)/(zoa_lst[i+1]-zoa_lst[i])
-		if izcoa == -1 or zcoa_lw>1 or zcoa_lw<0:
-			print('Sthg is very wrong')
-		F_lst=F_tab[izcoa,:]*zcoa_lw+F_tab[izcoa+1,:]*(1-zcoa_lw)
-		F=interp(Fr2,Fr2_lst,F_lst)
-		F=max(0.0,F)
-	V_Ent=pi*l**3/6.0*F*B*W
-	# print("F,B,W:{:.3e}, {:.3e}, {:.3e}".format(F,B,W))
-	if V_Ent < 0:
-		print('WTF?????????')
-	return V_Ent, F, B, W, Fr2, wz
-####################################################################
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, nogil=True)
 def J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig):
 	#---- Eddy velocity ----#
 	ulamsq=interp(l,lst,ul2_lst)
@@ -358,7 +285,6 @@ def J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig):
 	#---- Eddy lifetime
 	# tau_vort=l**(2.0/3.0)/et**(1.0/3.0)
 	tau_vort=ulamsq*0.5/et
-
 	#---- MIT model input ----#
 	Reg=circ_p/nu; 				Weg=circ_p**2*rhoc/(0.5*l*sig)
 	Bog=g*(l/2)**2/(sig/rhoc)
@@ -372,118 +298,170 @@ def J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig):
 	#---- Breakage probability ----#
 	We = rhoc*l*ulamsq/sig #Weber number
 	x = sqrt(2/We)
-	return ulamsq,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort
+	return Reg,Bog,Weg,circ_p,n_lam,x,tau_vort
 ####################################################################
-# @jit(nopython=True, cache=True)
-def int_seg_find(nwz,l,zp_lst,wz_lst,zoa_lst,FrXcoefs,circ_p,g):
-	Fr2_lst=circ_p*wz_lst/(l**2/4*g)
-	Fr2_crit_lst=zeros(nwz)
-	for i in range(nwz):
-		zp=zp_lst[i]
-		zcoa=-1*zp/(l/2)
-		zcoa_scl=(zcoa-FrXcoefs[7])/FrXcoefs[8]
-		# Critical Fr2
-		Fr2_crit_lst[i]=FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
+# Constants #
+# See Fr2_crit_lst_getter_helper for details
+zcoa_l  = 1.6057930839841816;	zcoa_r  = -1.6057930839841816;
+base_l  = 0.19000483988061692;	base_r  = 0.35277970476728265;
+slope_l = 0.20371010807162385;	slope_r = -0.06749286124910733;
+@jit(nopython=True, cache=True, nogil=True)
+def Fr2_crit_getter(l,zp,FrXcoefs,Fr2_crt_PolyExtra):
+	zcoa=-1*zp/(l/2)
+	zcoa_scl=(zcoa-FrXcoefs[7])/FrXcoefs[8]
+	if Fr2_crt_PolyExtra or (zcoa>=-6 and zcoa<=-4): # Critical Fr2 (outside use original formulation)
+		Fr2_crit =FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
 		FrXcoefs[3]*zcoa_scl**3+FrXcoefs[4]*zcoa_scl**2+FrXcoefs[5]*zcoa_scl + FrXcoefs[6]
-	diff=Fr2_lst-Fr2_crit_lst
-	num_seg=0; zp_seg=[]
-	if ~(diff.any()>0): # integrating over all domain, Fr2>Fr2_crit
-		num_seg = 1
-		zp_seg=[zp_lst.min(), zp_lst.max()]
+	else: # Critical Fr2 (outside use linear extrapolation)
+		if zcoa>=-4:
+			dzcoa = zcoa_scl-zcoa_l
+			Fr2_crit  = base_l+slope_l*dzcoa
+		elif zcoa<=-6:
+			dzcoa = zcoa_scl-zcoa_r
+			Fr2_crit  = base_r+slope_r*dzcoa
+	return Fr2_crit
+####################################################################
+def Fr2_minus_Fr2_crit(zp,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra):
+	wz =  get_rise_speed(l,2*zp,kt,et,nu,cL,cEta,method=2)
+	Fr2 = circ_p*wz/(l**2/4*g)
+	Fr2crt = Fr2_crit_getter(l,zp,FrXcoefs,Fr2_crt_PolyExtra)
+	return Fr2 - Fr2crt
+####################################################################
+from scipy.optimize import brenth
+def root_find(l,zp_min,zp_max,kt,et,nu,cL,cEta,circ_p,g,FrXcoefs,Fr2_crt_PolyExtra):
+	# See if there is root within the segment
+	diff_left  = Fr2_minus_Fr2_crit(zp_min,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra)
+	diff_right = Fr2_minus_Fr2_crit(zp_max,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra)
+	if (diff_left*diff_right < 0.0 ):
+		root = brenth(Fr2_minus_Fr2_crit,zp_min,zp_max,
+					  args=(l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra),
+					  rtol=1e-4)
+		has_root = True
 	else:
-		if diff[0] > 0: #Rising edge
-			num_seg = 1; zp_R_edge = zp_lst[0]
-		i=0
-		while i < nwz-1:
-			if diff[i] > 0 and diff[i+1] <= 0: #Falling edge
-				zp_F_edge=zp_lst[i]-diff[i]/((diff[i]-diff[i+1])/(zp_lst[i]-zp_lst[i+1]))
-				zp_seg.append((zp_R_edge,zp_F_edge))
-			elif diff[i] < 0 and diff[i+1] >= 0: #Rising edge
-				zp_R_edge=zp_lst[i]-diff[i]/((diff[i]-diff[i+1])/(zp_lst[i]-zp_lst[i+1]))
-				num_seg=num_seg+1
-			i = i + 1
-		if diff[nwz-1] > 0: #Rising edge
-			zp_seg.append((zp_R_edge,zp_lst[nwz-1]))
+		has_root = False; root = -1.0
+	return has_root, root
+####################################################################
+def int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra):
+	# Search for integration based on Fr and Fr_crit
+	# Search is divided into regions
+	# Number of regions is determined by
+	# whether Poly extrapolation for Fr2_crt is used (6 regions) or not (3 regions)
+	# Fr **always** increases with depth
+	if Fr2_crt_PolyExtra: # At most 6 regions
+		zl_breakpoints=[2.03417342, 2.19577958, 2.56982698, 3.03826383, 3.11406141]; num_zl_bpts=5
+	else: # At most 6 regions
+		zl_breakpoints=[2.03417342, 2.19577958, 2.56982698]; num_zl_bpts=3
+	zl_list=[zlam_min]; zl_list_size=1
+	for i in range(num_zl_bpts): # Find the range considering zlam_min and zlam_max
+		if zl_breakpoints[i] > zlam_min and zl_breakpoints[i] < zlam_max:
+			zl_list.append(zl_breakpoints[i]);	zl_list_size += 1
+	zl_list.append(zlam_max);	zl_list_size += 1
+	
+	roots_list=[]; num_roots=0;
+	for i in range(zl_list_size-1): # Find the roots
+		has_root, root = root_find(l,zl_list[i]*l,zl_list[i+1]*l,kt,et,nu,cL,cEta,
+									circ_p,g,FrXcoefs,Fr2_crt_PolyExtra)
+		if has_root:
+			# print("zlam {:.3e} to {:.3e} has root ==> zp_root: {:.4e}".format(zl_list[i],zl_list[i+1],root))
+			# dif = Fr2_minus_Fr2_crit(root,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra)
+			# print("Fr2 - Fr2_crt {:.6e}".format(dif))
+			roots_list.append(root); num_roots += 1;
+	
+	num_seg=0; zp_seg=[]
+	roots_list.insert(0,zlam_min*l)
+	roots_list.append(zlam_max*l)
+	for i in range(num_roots+1):
+		mid=0.5*(roots_list[i] + roots_list[i+1])
+		diff_mid = Fr2_minus_Fr2_crit(mid,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra)
+		if diff_mid > 0:
+			# print("Seg found from {:.3e} to {:.3e} at {:.3e}".format(roots_list[i], roots_list[i+1], mid))
+			num_seg = num_seg+1;
+			zp_seg.append((roots_list[i], roots_list[i+1]))
+	# diff=Fr2_lst-Fr2_crit_lst
+	# if ~(diff.any()>0): # integrating over all domain, Fr2>Fr2_crit
+	# 	num_seg = 1
+	# 	zp_seg=[zp_lst.min(), zp_lst.max()]
+	# else:
+	# 	if diff[0] > 0: #Rising edge
+	# 		num_seg = 1; zp_R_edge = zp_lst[0]
+	# 	i=0
+	# 	while i < nwz-1:
+	# 		if diff[i] > 0 and diff[i+1] <= 0: #Falling edge
+	# 			zp_F_edge=zp_lst[i]-diff[i]/((diff[i]-diff[i+1])/(zp_lst[i]-zp_lst[i+1]))
+	# 			zp_seg.append((zp_R_edge,zp_F_edge))
+	# 		elif diff[i] < 0 and diff[i+1] >= 0: #Rising edge
+	# 			zp_R_edge=zp_lst[i]-diff[i]/((diff[i]-diff[i+1])/(zp_lst[i]-zp_lst[i+1]))
+	# 			num_seg=num_seg+1
+	# 		i = i + 1
+	# 	if diff[nwz-1] > 0: #Rising edge
+	# 		zp_seg.append((zp_R_edge,zp_lst[nwz-1]))
 	return num_seg, zp_seg
 ####################################################################
-def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange):
-	if rrange > 0:
-		z_st_crt_max=2.5698*rrange	
-		z_st_crt_min=2.5698		
-	else:
-		z_st_crt_max=3
-		z_st_crt_min=2
-	zmax=z_st_crt_max*l;	zmin=z_st_crt_min*l
-	ulamsq,Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=\
+def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP):
+	global t1, t2, t3, t4, t1_1, t1_2, t1_3
+	Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=\
 	J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
-	# Calculate rising speed table
-	nwz=100
-	zp_lst=linspace(zmin,zmax,nwz)
-	wz_lst=zeros(nwz)
-	for iz in range(nwz):
-		wz_lst[iz] = get_rise_speed(l,2*zp_lst[iz],kt,et,nu,cL,cEta,method=2)
 	# Figure out number of segments in integration
-	Refitcoefs=Table['Refitcoefs'][0];	FrXcoefs=Table['FrXcoefs'][0]
-	Fr2_lst=Table['flxfr_data'][0,:]; zoa_lst=Table['z_a_data'][:,0]; F_tab=Table['F_lookuptable']
-	num_seg, zp_seg = int_seg_find(nwz,l,zp_lst,wz_lst,zoa_lst,FrXcoefs,circ_p,g)
+	num_seg, zp_seg = int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra)
 	if num_seg == 0:
 		return 0
-	# print(num_seg,zp_seg[0])
-	#---- Breakage probability ----#
-	PB=erfc(x)+2/sqrt(pi)*x*exp(-(x**2))
-
 	V_int = 0
+	# Integrate in each segment
 	for iseg in range(num_seg):
-		nwz=100
+		nwz = 50 # in each depth segment
 		zp_lst=linspace(zp_seg[iseg][0],zp_seg[iseg][1],nwz)
 		wz_lst=zeros(nwz)
 		for iz in range(nwz):
 			wz_lst[iz] = get_rise_speed(l,2*zp_lst[iz],kt,et,nu,cL,cEta,method=2)
-		# print(iseg,zp_seg[iseg][0]/l,zp_seg[iseg][1]/l)
 		V_int=V_int+quad(Ent_Volume_intgrand_jit, log(zp_seg[iseg][0]), log(zp_seg[iseg][1]), \
-		                 args=(l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab), \
-		                 limit = 100)[0]
-	#---- J_lambda ----#
-	# print("cL:{:.6e},cEta:{:.6e}".format(cL,cEta))
-	# print("n_lam:{:.3e}".format(n_lam))
-	# print("PB:{:.3e}".format(PB))
-	# print("V_int:{:.3e}".format(V_int))
-	# print("tau_vort:{:.3e}".format(tau_vort))
-	# print("WZ test:{:.3e}".format(get_rise_speed(l,2.23*l,kt,et,nu,cL,cEta,method=2)))
-	# llst = logspace(log10(l),log10(2.23*l),500)
-	# klst = 2*pi/llst
-	# Ek_out=zeros(500)
-	# eta=(nu**3/et)**0.25; L=kt**1.5/et;
-	# C=1.5;	p0=2.0;	beta=5.2
-	# for i in range(500):
-	# 	Ek_out[i]=Ek_int(klst[i],cL,cEta,C,L,p0,beta,eta,et)
-	# Ekint_trapz=trapezoid(flip(Ek_out),flip(klst))
-	# print("Ek_int={:.4e}, resulting wz:{:.4e}".format(Ekint_trapz,(Ekint_trapz *2.0/3.0)**(0.5)))
-	# # V_debug, F, B, W, Fr2, wz=Ent_Volume_intgrand_jit_dbg(log(l*2.5),l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab)
-	# # print("V_debug, F, B, W:{:.4e}m^3, {:.4e}, {:.4e}, {:.4e}, {:.4e}, {:.4e}".format(V_debug, F, B, W, Fr2, wz))
+		                 args=(l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zoa_lst,F_tab,F_tab_NP), \
+		                 limit = 100,epsrel = 1e-5)[0]
+	#---- Breakage probability ----#
+	PB=erfc(x)+2/sqrt(pi)*x*exp(-(x**2))
 	J_lam=n_lam*PB*V_int/tau_vort
 	return J_lam
 ####################################################################
-def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,rrange,wmeth):
+def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP):
 	if (wmeth!=2 and wmeth>0):
 		print('Not working in this mode.')
 		return -1
-
+	Refitcoefs=Table['Refitcoefs'];	FrXcoefs=Table['FrXcoefs']
+	Fr2_lst=Table['flxfr_data']; zoa_lst=Table['z_a_data']; F_tab=Table['F_lookuptable']
 	cL,cEta=findcLceta(kt,et,nu,mode=1)
 	L=kt**1.5/et
-	x1=sqrt(4*sig/rhoc/g); x2=sqrt(200*sig/rhoc/g); x3=L; x4=50*L; # Lambda range
+	x1=sqrt(4*sig/rhoc/g); x2=sqrt(200*sig/rhoc/g); x3=L; x4=100*L; # Lambda range
 	# For speed get a table of ulambda_square
-	nlst=1500
+	nlst=400
 	# lst=logspace(-8,2,nlst);
 	lst=logspace(log10(x1),log10(x4),nlst);	ul2_lst=zeros(nlst) #with dimension!
 	for i in range(nlst):
 		ul2_lst[i]=ulambda_sq(lst[i],kt,et,cL,cEta,nu,pope_spec=1.01)
-	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange):
-		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange)*exp(u)
+	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP):
+		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP)*exp(u)
 	J=quadrature(intgrd,  log(x1), log(x2),
-	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange),
-	             vec_func=False,maxiter=51)[0] +\
+	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP),
+	             vec_func=False,maxiter=51,rtol=1e-3)[0] +\
 	quadrature(intgrd,  log(x2), log(x4),
-	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Table,rrange),
-	            vec_func=False,maxiter=52)[0]
+	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP),
+	            vec_func=False,maxiter=52,rtol=1e-3)[0]
 	return J
+####################################################################
+# These constans are pre-calculated
+# @jit(nopython=True, cache=True, nogil=True)
+# def Fr2_crit_lst_getter_helper(FrXcoefs,Fr2_crt_PolyExtra):
+# 	if ~Fr2_crt_PolyExtra(): # Pre processing
+# 		#left
+# 		zcoa_l=(-4-FrXcoefs[7])/FrXcoefs[8]
+# 		base_l = FrXcoefs[0]*zcoa_l**6+FrXcoefs[1]*zcoa_l**5+FrXcoefs[2]*zcoa_l**4+\
+# 		FrXcoefs[3]*zcoa_l**3+FrXcoefs[4]*zcoa_l**2+FrXcoefs[5]*zcoa_l + FrXcoefs[6]
+# 		slope_l = FrXcoefs[0]*zcoa_l**5*6+FrXcoefs[1]*zcoa_l**4*5+FrXcoefs[2]*zcoa_l**3*4+\
+# 		FrXcoefs[3]*zcoa_l**2*3+FrXcoefs[4]*zcoa_l*2+FrXcoefs[5]
+# 		#right
+# 		zcoa_r=(-6-FrXcoefs[7])/FrXcoefs[8]
+# 		base_r = FrXcoefs[0]*zcoa_r**6+FrXcoefs[1]*zcoa_r**5+FrXcoefs[2]*zcoa_r**4+\
+# 		FrXcoefs[3]*zcoa_r**3+FrXcoefs[4]*zcoa_r**2+FrXcoefs[5]*zcoa_r + FrXcoefs[6]
+# 		slope_r = FrXcoefs[0]*zcoa_r**5*6+FrXcoefs[1]*zcoa_r**4*5+FrXcoefs[2]*zcoa_r**3*4+\
+# 		FrXcoefs[3]*zcoa_r**2*3+FrXcoefs[4]*zcoa_r*2+FrXcoefs[5]
+# 	else:
+# 		zcoa_l = 0; base_l = 0; slope_l = 0; zcoa_r = 0; base_r = 0; slope_r = 0
+# 	return zcoa_l,base_l,slope_l,zcoa_r,base_r,slope_r

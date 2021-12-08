@@ -4,7 +4,7 @@ from scipy.sparse.linalg import spsolve
 from Utilities import get_ug, assemble_matrix, assemble_rhs
 from scipy.sparse import dia_matrix, csc_matrix
 from Model import Jent_numerical_prev, Jent_numerical_New
-def Turb_entrainment(Nx,Nt,kt,et,g,rhoc,rhod,sigma,z,nuc,nut,G,D,Dg,dt,Sl0,Table,model,rrange,wmeth):
+def Turb_entrainment(Nx,Nt,kt,et,g,rhoc,rhod,sigma,z,nuc,nut,G,D,Dg,dt,Sl0,Table,model,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP):
 	t1=t.time()
 	for i in range(Nx):
 		if z[i] > 0.5 :
@@ -65,9 +65,9 @@ def Turb_entrainment(Nx,Nt,kt,et,g,rhoc,rhod,sigma,z,nuc,nut,G,D,Dg,dt,Sl0,Table
 			S[i] = Sl0*J/v0;
 		if model == 2:
 			# New model
-			J=Jent_numerical_New(kt[i],et[i],nuc,g,rhoc,sigma,Table,rrange,wmeth)
+			J=Jent_numerical_New(kt[i],et[i],nuc,g,rhoc,sigma,Table,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP)
 			S[i] = J/v0;
-		print ('>>>> i={:3d}, t={:.2f}s'.format(i,t.time()-t2))
+		# print ('>>>> i={:3d}, t={:.2f}s'.format(i,t.time()-t2))
 	print('Matrix build complete, time:{:.4f}s'.format(t.time()-t1))
 	time=zeros(Nt);	alpha0=zeros(Nt); alpha_mid=zeros(Nt); alpha_out=zeros((Nx,Nt))
 
