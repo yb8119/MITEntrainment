@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.integrate import quad
 from scipy.optimize  import fsolve
-from scipy.interpolate import RectBivariateSpline
+from scipy.interpolate import RectBivariateSpline, interp2d
 from numpy import sin, cos, pi, sqrt, interp, zeros
 from numba import jit, float64
 ########################################################################################################################
@@ -210,23 +210,23 @@ def assemble_rhs(N0,S,dt):
 	return b
 ########################################################################################################################
 # @jit(nopython=True, cache=True)
-def F_func_table_ext(Fr2_lst,Fr2_tgt,zoa_lst,zoa_tgt,F_tab,method):
-	d1  = zoa_tgt.size-1;	d2  = Fr2_tgt.size-1
-	d1o = zoa_lst.size-1;	d2o = Fr2_lst.size-1
+def F_func_table_ext(Fr2_lst,Fr2_tgt,zcoa_lst,zcoa_tgt,F_tab,method):
+	d1  = zcoa_tgt.size-1;	d2  = Fr2_tgt.size-1
+	d1o = zcoa_lst.size-1;	d2o = Fr2_lst.size-1
 	F_tab_out=zeros((d1+1,d2+1))
 	if method == "Linear Exrapolation":
 		# z_a_data goes from -6 to -4; flxfr_data goes from 0 to 4
 		# extrapolate zoa dimension first 
 		for iz in range(d1+1):
-			izcoa=-1; zcoa = zoa_tgt[iz]
-			if zcoa >= zoa_lst[d1o-1]:
-				izcoa=d1o-1; zcoa_lw=(zoa_lst[d1o]-zcoa)/(zoa_lst[d1o]-zoa_lst[d1o-1]); 
-			elif zcoa <= zoa_lst[0]:
-				izcoa=0; 	zcoa_lw=(zoa_lst[1] -zcoa)/(zoa_lst[1] -zoa_lst[0]); 
+			izcoa=-1; zcoa = zcoa_tgt[iz]
+			if zcoa >= zcoa_lst[d1o-1]:
+				izcoa=d1o-1; zcoa_lw=(zcoa_lst[d1o]-zcoa)/(zcoa_lst[d1o]-zcoa_lst[d1o-1]); 
+			elif zcoa <= zcoa_lst[0]:
+				izcoa=0; 	zcoa_lw=(zcoa_lst[1] -zcoa)/(zcoa_lst[1] -zcoa_lst[0]); 
 			if izcoa == -1: #within the range
 				for i in range(d1o):
-					if zcoa>=zoa_lst[i] and zcoa<zoa_lst[i+1]:
-						izcoa=i; zcoa_lw=(zoa_lst[i+1]-zcoa)/(zoa_lst[i+1]-zoa_lst[i])
+					if zcoa>=zcoa_lst[i] and zcoa<zcoa_lst[i+1]:
+						izcoa=i; zcoa_lw=(zcoa_lst[i+1]-zcoa)/(zcoa_lst[i+1]-zcoa_lst[i])
 			if izcoa == -1:
 				print('Sthg is very wrong(zcoa), {}, {}'.format(izcoa, zcoa_lw))
 			F_lst=F_tab[izcoa,:]*zcoa_lw+F_tab[izcoa+1,:]*(1-zcoa_lw)
@@ -246,12 +246,13 @@ def F_func_table_ext(Fr2_lst,Fr2_tgt,zoa_lst,zoa_tgt,F_tab,method):
 				F_tab_out[iz,jf]=max(0.0,F_lst[jfr]*fr2_lw+F_lst[jfr+1]*(1-fr2_lw))
 	elif method == "Nearest Point":
 		# RectBivariateSpline use nearest point by default.
-		X = zoa_lst
+		X = zcoa_lst
 		Y = Fr2_lst
-		f = RectBivariateSpline(X, Y, F_tab)
+		# f = RectBivariateSpline(X, Y, F_tab)
+		f = interp2d(X, Y, F_tab.T)
 		for i in range(d1+1):
 			for j in range(d2+1):
-				F_tab_out[i,j] = f(zoa_tgt[i],Fr2_tgt[j])
+				F_tab_out[i,j] = f(zcoa_tgt[i],Fr2_tgt[j])
 	else:
 		print("ERROR: Wrong method parameter involked!")
 	return F_tab_out

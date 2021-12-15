@@ -168,30 +168,6 @@ def get_rise_speed(l1,l2,kt,et,nu,cL,cEta,method):
 		p1 = (p1 *2.0/3.0)**(0.5)
 		return p1
 ####################################################################
-@jit(nopython=True, cache=True, nogil=True)
-def max_entrainement(l,ulamsq,kt,et,cL,cEta,nu,g,rhoc,sig):
-	# ulamsq=ulambda_sq(l,kt,et,cL,cEta,nu,pope_spec=1.01)
-	# def E_ent_intgrand(d):
-	# 	x=sqrt(2*sig/rhoc/d/ulamsq)
-	# 	p0=rhoc*ulamsq/sig*x**5*exp(-x**2)/sqrt(pi)
-	# 	# return p0*(sig*pi*d**2+(rhoc-rhod)/6*pi*d**3*g)
-	# 	return p0*(2*sig/d/4*pi*l**3)
-	# def avg_volume(d):
-	# 	x=sqrt(2*sig/rhoc/d/ulamsq)
-	# 	p0=rhoc*ulamsq/sig*x**5*exp(-x**2)/sqrt(pi)
-	# 	# return p0*(sig*pi*d**2+(rhoc-rhod)/6*pi*d**3*g)
-	# 	return p0*(1/6*pi*d**3)
-	# E_ent_per_bubb=quad(E_ent_intgrand,0,inf)[0]
-	# d_lst=logspace(-5,-1,200); E_lst=zeros(200)
-	# for i in range(200):
-	# 	E_lst[i]=avg_volume(d_lst[i])
-	# plt.plot(d_lst,E_lst)
-	# # Vmax=0.5*(rhoc/4*pi*l**3)*ulamsq*v0/E_ent_per_bubb
-	#=====================================================
-	ulam3=ulamsq**(1.5)
-	Vmax=pi/6*(rhoc/8/sig*l**3)**(1.5)*ulam3
-	return Vmax
-####################################################################
 #           Single depth version (z_c=3\lambda)
 ####################################################################
 @jit(nopython=True, cache=True, nogil=True)
@@ -223,10 +199,41 @@ def Ent_Volume(zp,l,lst,ul2_lst,Reg,Bog,Weg,kt,et,cL,cEta,nu,g,circ_p,Vmax):
 #           Multiple depth version (z_c=3\lambda)
 ####################################################################
 @jit(nopython=True, cache=True, nogil=True)
-def Ent_Volume_intgrand_jit(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zoa_lst,F_tab,F_tab_NP):
-	zp=exp(logzp)
-	zcoa=-1*zp/(l/2)
-	# ===== Reynolds number dependence =====
+def OneD_interp_weight(x,x_lst,isNP):
+	if x_lst[1] < x_lst[0]:
+		print('### Error: Input arry not mono increasing! ####')
+		return (0, 0)
+	ix=-1; d_lst = x_lst.size-1
+	###### Inter/extrapolate "zoa" dimension ######
+	if not(isNP): # Using linear extrapolation
+		if x >= x_lst[d_lst-1]:
+			ix=d_lst-1; x_lw=(x_lst[d_lst]-x)/(x_lst[d_lst]-x_lst[d_lst-1])
+		elif x <= x_lst[0]:
+			ix=0; 		x_lw=(x_lst[1] -x)/(x_lst[1] -x_lst[0])
+	else: #  Performing N-P extrapolation (cap) for the table (takes in the original table)
+		if x >= x_lst[d_lst-1]:
+			ix=d_lst-1;	x_lw=0.0 
+		elif x <= x_lst[0]:
+			ix=0;		x_lw=1.0 
+	if ix == -1: # within the original table range
+		for i in range(d_lst):
+			if x>=x_lst[i] and x<x_lst[i+1]:
+				ix=i; x_lw=(x_lst[i+1]-x)/(x_lst[i+1]-x_lst[i])
+				break
+	if ix == -1:
+		print('### Error: Extrapolation/interpolation not working properly! ####')
+		return (0, 0)
+	return (ix, x_lw)
+@jit(nopython=True, cache=True, nogil=True)
+def Fr_contribution(zcoa,Fr2,F_tab_NP,zcoa_lst,F_tab,Fr2_lst):
+	(izcoa, zcoa_lw) = OneD_interp_weight(zcoa, zcoa_lst, F_tab_NP)
+	F_lst=F_tab[izcoa,:]*zcoa_lw+F_tab[izcoa+1,:]*(1-zcoa_lw)
+	###### Inter/extrapolate "Fr2" dimension ######
+	(jfr, fr2_lw) = OneD_interp_weight(Fr2, Fr2_lst, F_tab_NP)
+	F=max(0.0,F_lst[jfr]*fr2_lw+F_lst[jfr+1]*(1-fr2_lw))
+	return F
+@jit(nopython=True, cache=True, nogil=True)
+def Re_contribution(zcoa,Refitcoefs,Reg):
 	b=Refitcoefs[1]+Refitcoefs[4]*zcoa
 	a=Refitcoefs[3]
 	if Reg < -b/2/a:
@@ -236,42 +243,34 @@ def Ent_Volume_intgrand_jit(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoef
 		B=Refitcoefs[0] + Refitcoefs[1]*(-b/2/a) + Refitcoefs[2]*zcoa + \
 		Refitcoefs[3]*(-b/2/a)**2 + Refitcoefs[4]*(-b/2/a)*zcoa
 	B=max(0.0,B)
-	# ===== Weber number dependence =====
+	return B
+@jit(nopython=True, cache=True, nogil=True)
+def We_contribution(Bog,Weg):
 	if Bog<1:
 		W=0
 	elif Bog<50:
 		W=1.5e-2+8.1e-5*Weg
 	else:
 		W=1
-	# ===== Friude number dependence =====
+	return W
+####################################################################
+@jit(nopython=True, cache=True, nogil=True)
+def Ent_Volume_intgrand_jit(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zcoa_lst,F_tab,F_tab_NP):
+	zp=exp(logzp)
+	zcoa=-1*zp/(l/2)
+	# ===== Reynolds number dependence =====
+	B = Re_contribution(zcoa,Refitcoefs,Reg)
+	# ===== Weber number dependence =====
+	W = We_contribution(Bog,Weg)
+	# ===== Froude number dependence =====
 	# New Method
 	wz=interp(zp,zp_lst,wz_lst)
 	# wz = get_rise_speed(l,2*zp,kt,et,nu,cL,cEta,method=2)
 	Fr2=circ_p*wz/(l**2/4*g)
-	izcoa=-1
-	if not(F_tab_NP): # Using linear extrapolated table, must probe inside range
-		if zcoa > max(zoa_lst):
-			print ("zoa_lst out of range error!!")
-		elif zcoa < min(zoa_lst):
-			print ("zoa_lst out of range error!!")
-	else: #  Performing N-P extrapolation (cap) for the table (takes in the original table)
-		if zcoa >= max(zoa_lst):
-			izcoa=len(zoa_lst)-2; zcoa_lw=0; 
-		elif zcoa <= min(zoa_lst):
-			izcoa=0; 			zcoa_lw=1; 
-	if izcoa == -1:
-		for i in range(len(zoa_lst)-1):
-			if zcoa>=zoa_lst[i] and zcoa<zoa_lst[i+1]:
-				izcoa=i; zcoa_lw=(zoa_lst[i+1]-zcoa)/(zoa_lst[i+1]-zoa_lst[i])
-	if izcoa == -1 or zcoa_lw>1 or zcoa_lw<0:
-		print('Sthg is very wrong')
-	F_lst=F_tab[izcoa,:]*zcoa_lw+F_tab[izcoa+1,:]*(1-zcoa_lw)
-	F=interp(Fr2,Fr2_lst,F_lst)
-	F=max(0.0,F)
+	F = Fr_contribution(zcoa,Fr2,F_tab_NP,zcoa_lst,F_tab,Fr2_lst)
 	V_Ent=pi*l**3/6.0*F*B*W
-	# print("F,B,W:{:.3e}, {:.3e}, {:.3e}".format(F,B,W))
 	if V_Ent < 0:
-		print('WTF?????????')
+		print('Error: Entrainment volume less than 0')
 	return V_Ent*zp
 ####################################################################
 @jit(nopython=True, cache=True, nogil=True)
@@ -377,33 +376,14 @@ def int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_
 			# print("Seg found from {:.3e} to {:.3e} at {:.3e}".format(roots_list[i], roots_list[i+1], mid))
 			num_seg = num_seg+1;
 			zp_seg.append((roots_list[i], roots_list[i+1]))
-	# diff=Fr2_lst-Fr2_crit_lst
-	# if ~(diff.any()>0): # integrating over all domain, Fr2>Fr2_crit
-	# 	num_seg = 1
-	# 	zp_seg=[zp_lst.min(), zp_lst.max()]
-	# else:
-	# 	if diff[0] > 0: #Rising edge
-	# 		num_seg = 1; zp_R_edge = zp_lst[0]
-	# 	i=0
-	# 	while i < nwz-1:
-	# 		if diff[i] > 0 and diff[i+1] <= 0: #Falling edge
-	# 			zp_F_edge=zp_lst[i]-diff[i]/((diff[i]-diff[i+1])/(zp_lst[i]-zp_lst[i+1]))
-	# 			zp_seg.append((zp_R_edge,zp_F_edge))
-	# 		elif diff[i] < 0 and diff[i+1] >= 0: #Rising edge
-	# 			zp_R_edge=zp_lst[i]-diff[i]/((diff[i]-diff[i+1])/(zp_lst[i]-zp_lst[i+1]))
-	# 			num_seg=num_seg+1
-	# 		i = i + 1
-	# 	if diff[nwz-1] > 0: #Rising edge
-	# 		zp_seg.append((zp_R_edge,zp_lst[nwz-1]))
 	return num_seg, zp_seg
 ####################################################################
-def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP):
-	global t1, t2, t3, t4, t1_1, t1_2, t1_3
-	Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=\
-	J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
+def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP):
+	Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
 	# Figure out number of segments in integration
 	num_seg, zp_seg = int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra)
 	if num_seg == 0:
+		print("Fr2 too small")
 		return 0
 	V_int = 0
 	# Integrate in each segment
@@ -414,35 +394,60 @@ def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_l
 		for iz in range(nwz):
 			wz_lst[iz] = get_rise_speed(l,2*zp_lst[iz],kt,et,nu,cL,cEta,method=2)
 		V_int=V_int+quad(Ent_Volume_intgrand_jit, log(zp_seg[iseg][0]), log(zp_seg[iseg][1]), \
-		                 args=(l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zoa_lst,F_tab,F_tab_NP), \
+		                 args=(l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zcoa_lst,F_tab,F_tab_NP), \
 		                 limit = 100,epsrel = 1e-5)[0]
 	#---- Breakage probability ----#
 	PB=erfc(x)+2/sqrt(pi)*x*exp(-(x**2))
 	J_lam=n_lam*PB*V_int/tau_vort
 	return J_lam
 ####################################################################
+def max_lambda(kt,et,nu,g,cL,cEta,zlam_min,zlam_max,FrXcoefs,Fr2_crt_PolyExtra):
+	L=kt**1.5/et
+	if zlam_min>=2 and zlam_max <= 3:
+		return 100 * L # Too complicated
+	else:
+		lmax = 100 * L
+		if zlam_min<2 and zlam_max > 3:
+			zlam = 2.57
+		elif zlam_min > 3:
+			zlam = zlam_min
+		else:
+			print("Not implemented yet!!!")
+			return -1
+		for iloop in range(8):
+			Fr2_cr = Fr2_crit_getter(1,zlam,FrXcoefs,Fr2_crt_PolyExtra)*0.95
+			wz = get_rise_speed(lmax,zlam*lmax,kt,et,nu,cL,cEta,method=2)
+			# print("lmax: {:.5e}m, wz_oe: {:.4e}m/s, vel fluc: {:.4e}m/s".format(lmax,wz,(2/3*kt)**(1/2)))
+			ulam = sqrt(ulambda_sq(lmax,kt,et,cL,cEta,nu,pope_spec=1.01))
+			# lmax = sqrt(pi*pi*lmax**(4/3)*et**(1/3)*sqrt(2)*wz/g/Fr2_cr)
+			lmax = sqrt(pi*pi*lmax*ulam*wz/g/Fr2_cr)
+		# Fr2 = pi*pi*lmax*ulam*wz/g/lmax/lmax
+		# Fr2_approx = pi*pi*lmax**(4/3)*et**(1/3)*sqrt(2)*wz/g/lmax**2
+		# print("Fr2: {:.4e}, {:.4e}, Fr2_crt {:.4e}".format(Fr2,Fr2_approx,Fr2_cr))\
+		print("x4:{:.3e}".format(lmax))
+		return lmax
+####################################################################
 def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP):
 	if (wmeth!=2 and wmeth>0):
 		print('Not working in this mode.')
 		return -1
 	Refitcoefs=Table['Refitcoefs'];	FrXcoefs=Table['FrXcoefs']
-	Fr2_lst=Table['flxfr_data']; zoa_lst=Table['z_a_data']; F_tab=Table['F_lookuptable']
+	Fr2_lst=Table['flxfr_data']; zcoa_lst=Table['z_a_data']; F_tab=Table['F_lookuptable']
 	cL,cEta=findcLceta(kt,et,nu,mode=1)
-	L=kt**1.5/et
-	x1=sqrt(4*sig/rhoc/g); x2=sqrt(200*sig/rhoc/g); x3=L; x4=100*L; # Lambda range
+	x1=sqrt(4*sig/rhoc/g); x2=sqrt(200*sig/rhoc/g); x4=max_lambda(kt,et,nu,g,cL,cEta,zlam_min,zlam_max,FrXcoefs,Fr2_crt_PolyExtra); # Lambda range
 	# For speed get a table of ulambda_square
 	nlst=400
 	# lst=logspace(-8,2,nlst);
 	lst=logspace(log10(x1),log10(x4),nlst);	ul2_lst=zeros(nlst) #with dimension!
 	for i in range(nlst):
 		ul2_lst[i]=ulambda_sq(lst[i],kt,et,cL,cEta,nu,pope_spec=1.01)
-	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP):
-		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP)*exp(u)
+	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP):
+		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP)*exp(u)
 	J=quadrature(intgrd,  log(x1), log(x2),
-	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP),
+	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP),
 	             vec_func=False,maxiter=51,rtol=1e-3)[0] +\
 	quadrature(intgrd,  log(x2), log(x4),
-	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP),
+	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP),
 	            vec_func=False,maxiter=52,rtol=1e-3)[0]
 	return J
 ####################################################################

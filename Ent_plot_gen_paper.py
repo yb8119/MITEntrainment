@@ -2,12 +2,13 @@ from numpy import logspace, log10, zeros, sqrt, pi, linspace, meshgrid, savez, c
 import numpy as np
 from scipy.io import loadmat
 from Utilities import findcLceta, ulambda_sq, F_func_table_ext
-from Model import get_rise_speed
+from Model import Fr2_crit_getter
 from Plt_funcs import Calc_Para_Func
 from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 from matplotlib.ticker import LinearLocator
 import matplotlib.pyplot as plt
-from matplotlib import cm
+from matplotlib import cm, ticker
+import matplotlib.colors as matcolors
 import matplotlib.patches as patches
 
 plt.rcParams["font.family"] = "Times New Roman"
@@ -17,187 +18,144 @@ plt.rcParams.update({'font.size': fs})
 def_size=1000
 colors=["Black","Red","Green","Blue","Purple"]
 LineSty=["-",(0,(5,3)),(0,(3,3,1,3))]
-############# Physical/Flow field parameters #############
+# ****************** Physical/Flow field parameters ******************#
+#region
 nu =1e-6; g=9.81; sig=0.072;rhoc=1000;nu=1e-6
-kt = 1.0 #m2/s2
-et = 4.0 #m2/s3
-# kt = 1.75 #m2/s2
-# et = 3.32 #m2/s3
-zl_min=2
-zl_max=3000
+kt = 1.0 #m2/s2 # kt = 1.75 #m2/s2
+et = 4.0 #m2/s3 # et = 3.32 #m2/s3
+zl_min=2;	zl_max=3000
 cL,cEta=findcLceta(kt,et,nu,mode=1); L=kt**1.5/et
 ######## Get the basics for the MIT model ########
 # Load the depth table:
 Table=loadmat("UoIEntrainment.mat")
 Refitcoefs=Table['Refitcoefs'][0];	FrXcoefs=Table['FrXcoefs'][0]
-Fr2_lst=Table['flxfr_data'][0,:]; zoa_lst=Table['z_a_data'][:,0]; F_tab=Table['F_lookuptable']
+Fr2_lst=Table['flxfr_data'][0,:]; zcoa_lst=Table['z_a_data'][:,0]; F_tab=Table['F_lookuptable']
 nlst=1500; #x1=sqrt(4*sig/rhoc/g); x4=10*L
-lst=logspace(-5,2,nlst);	ul2_lst=zeros(nlst) #with dimension!
+lst=logspace(-5,2,nlst);	ul2_lst=zeros(nlst) #with dimension!'
+zp_lst = [0.2, 1, 5]
+lam_lst = [0.2, 1, 5]
+F_tab_NP = True
+Fr2_crt_PolyExtra = False
 for i in range(nlst):
 	ul2_lst[i]=ulambda_sq(lst[i],kt,et,cL,cEta,nu,pope_spec=1.01)
+#endregion
+# ********************* Critical Froude number square (extended range)
+#region
+#endregion
+# ********************* Froude number function (extended range) 
+#region
+# # fig, ax = plt.subplots(subplot_kw={"projection": "3d"},figsize=(6,6), dpi=200)
+# # Make data.
+# X = zcoa_lst
+# Y = Fr2_lst
+# Z = F_tab.transpose()
+# # Linear extrapolation
+# zoa_ext= concatenate((linspace(-2*zl_max, -2*3-1e-2, 100),linspace(-2*3, -2*2, 100)))
+# # zoa_ext	= linspace(-2*zl_max, -2*zl_min, 2000)
+# Fr2_ext	= concatenate((linspace(0, 4, 50),linspace(4+1e-2, 100, 100)))
+# Z_ext_LN = zeros((Fr2_ext.size,zoa_ext.size))
+# # Z_ext_NP = zeros((Fr2_ext.size,zoa_ext.size))
+# Z_ext_LN = F_func_table_ext(Fr2_lst,Fr2_ext,zcoa_lst,zoa_ext,F_tab,method="Linear Exrapolation").transpose()
+# # Z_ext_NP = F_func_table_ext(Fr2_lst,Fr2_ext,zcoa_lst,zoa_ext,F_tab,method="Nearest Point").transpose()
 
-#====================== Figure 4: Critical Froude number square (extended range) ======================#
-z_lam_ratio_l=linspace(0.5,2,def_size); z_lam_ratio_m=linspace(2,3,def_size); z_lam_ratio_r=linspace(3,6,def_size)
-Fr2_crt_list_l=zeros((def_size,2));Fr2_crt_list_m=zeros(def_size);
-Fr2_crt_list_r=zeros((def_size,2));
-Fr2_crt_extr=zeros(def_size);
-fig=plt.figure(figsize=(4,2),dpi=300)
-ax=fig.add_subplot(111)
-FrXcoefs=Table['FrXcoefs'][0]
-for i in range(def_size):
-	# Critical Fr2
-	zcoa = -1 * z_lam_ratio_m[i]*2
-	zcoa_scl=(zcoa-FrXcoefs[7])/FrXcoefs[8]
-	Fr2_crt_list_m[i]=FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
-	FrXcoefs[3]*zcoa_scl**3+FrXcoefs[4]*zcoa_scl**2+FrXcoefs[5]*zcoa_scl + FrXcoefs[6]
-for i in range(def_size):
-	zcoa = -1 * z_lam_ratio_l[i]*2
-	zcoa_scl=(zcoa-FrXcoefs[7])/FrXcoefs[8]
-	zcoa_l=(-4-FrXcoefs[7])/FrXcoefs[8]
-	dzcoa = zcoa_scl-zcoa_l
-	Fr2_crt_list_l[i,0] = Fr2_crt_list_m[0]+(FrXcoefs[0]*zcoa_l**5*6+FrXcoefs[1]*zcoa_l**4*5+FrXcoefs[2]*zcoa_l**3*4+\
-			FrXcoefs[3]*zcoa_l**2*3+FrXcoefs[4]*zcoa_l*2+FrXcoefs[5])*dzcoa
-	Fr2_crt_list_l[i,1] = FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
-	FrXcoefs[3]*zcoa_scl**3+FrXcoefs[4]*zcoa_scl**2+FrXcoefs[5]*zcoa_scl + FrXcoefs[6]
-
-	zcoa = -1 * z_lam_ratio_r[i]*2
-	zcoa_scl=(zcoa-FrXcoefs[7])/FrXcoefs[8]
-	zcoa_r=(-6-FrXcoefs[7])/FrXcoefs[8]
-	dzcoa = zcoa_scl-zcoa_r
-	Fr2_crt_list_r[i,0] = Fr2_crt_list_m[def_size-1]+(FrXcoefs[0]*zcoa_r**5*6+FrXcoefs[1]*zcoa_r**4*5+FrXcoefs[2]*zcoa_r**3*4+\
-			FrXcoefs[3]*zcoa_r**2*3+FrXcoefs[4]*zcoa_r*2+FrXcoefs[5])*dzcoa
-	Fr2_crt_list_r[i,1] = FrXcoefs[0]*zcoa_scl**6+FrXcoefs[1]*zcoa_scl**5+FrXcoefs[2]*zcoa_scl**4+\
-	FrXcoefs[3]*zcoa_scl**3+FrXcoefs[4]*zcoa_scl**2+FrXcoefs[5]*zcoa_scl + FrXcoefs[6]
-
-ax.plot(z_lam_ratio_m*-2,Fr2_crt_list_m,color="black")
-# ax.plot(z_lam_ratio_l,Fr2_crt_list_l[:,0],color="red",linestyle="-.")
-# ax.plot(z_lam_ratio_r,Fr2_crt_list_r[:,0],color="red",linestyle="-.",label="Extrapolation")
-# ax.plot(z_lam_ratio_l,Fr2_crt_list_l[:,1],color="red",linestyle="-")
-# ax.plot(z_lam_ratio_r,Fr2_crt_list_r[:,1],color="red",linestyle="-",label="Polynomial")
-# ax.plot([2,2],[ax.get_ylim()[0],ax.get_ylim()[1]],color="black",linestyle="--")
-# ax.plot([3,3],[ax.get_ylim()[0],ax.get_ylim()[1]],color="black",linestyle="--")
-ax.set_xlabel(r"$z_c^*$ [-]")
-# ax.legend()
-# ax.set_xlim([0.5,6])
-ax.set_xlim([-6,-4])
-ax.set_ylim([0,0.4])
-ax.set_ylabel(r"$\mathrm{Fr}^2_{crt,\Xi}$ [-]")
-# ax.set_yscale("log")
-#====================== Figure 5: Froude number function (extended range) ======================#
-# fig, ax = plt.subplots(subplot_kw={"projection": "3d"},figsize=(6,6), dpi=200)
-fig1, ax1 = plt.subplots(figsize=(5,4), dpi=200)
-fig2, ax2 = plt.subplots(figsize=(5,4), dpi=200)
-
-# Make data.
-X = zoa_lst
-Y = Fr2_lst
-Z = F_tab.transpose()
-# Linear extrapolation
-zoa_ext= concatenate((linspace(-2*zl_max, -2*3-1e-2, 800),linspace(-2*3, -2*2, 100)))
-# zoa_ext	= linspace(-2*zl_max, -2*zl_min, 2000)
-Fr2_ext	= linspace(0, 80, 500)
-Z_ext_LN = zeros((Fr2_ext.size,zoa_ext.size))
-Z_ext_NP = zeros((Fr2_ext.size,zoa_ext.size))
-Z_ext_LN = F_func_table_ext(Fr2_lst,Fr2_ext,zoa_lst,zoa_ext,F_tab,method="Linear Exrapolation").transpose()
-Z_ext_NP = F_func_table_ext(Fr2_lst,Fr2_ext,zoa_lst,zoa_ext,F_tab,method="Nearest Point").transpose()
-
-# f = interp2d(X, Y, Z, kind = 'cubic')
-# f = RectBivariateSpline(X, Y, F_tab, bbox=[min(X_ext)])
-# for i in range(X_ext.size):
-# 	for j in range(Y_ext.size):
-# 		Z_ext[j,i] = f(X_ext[i],Y_ext[j])
-X, Y = meshgrid(X, Y)
-X_ext, Y_ext = meshgrid(zoa_ext, Fr2_ext)
-
-# ======================== Plot the surface. ========================
+# # f = interp2d(X, Y, Z, kind = 'cubic')
+# # f = RectBivariateSpline(X, Y, F_tab, bbox=[min(X_ext)])
+# # for i in range(X_ext.size):
+# # 	for j in range(Y_ext.size):
+# # 		Z_ext[j,i] = f(X_ext[i],Y_ext[j])
+# X, Y = meshgrid(X, Y)
+# X_ext, Y_ext = meshgrid(zoa_ext, Fr2_ext)
+# z_o_l_frc = linspace(-2*zl_max, -2*zl_min, 250); Frc2=zeros(250)
+# for i in range(250):
+# 	(tmp, tmp, tmp,
+# 	 tmp, tmp,
+# 	 tmp, tmp, Frc2[i])=\
+# 	Calc_Para_Func(z_o_l_frc[i]/-2*100,100,lst,ul2_lst,rhoc,
+# 	               sig,kt,et,nu,cL,cEta,g,
+# 	               Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zl_min,zl_max) 
+# def plot_F(X,Y,Z,z_o_l_frc,Frc2):
+# 	vmin =max(1e-10,Z.min()); vmax = Z.max()
+# 	fig, ax = plt.subplots(figsize=(5,4), dpi=200)
+# 	rect = patches.Rectangle((-6,0),2,4, linewidth=1, edgecolor='white', facecolor='none')
+# 	cb_range=linspace(vmin,vmax,101)
+# 	# cb_range=logspace(log10(vmin),log10(vmax),101)
+# 	cs = ax.contourf(X, Y, Z, 
+# 				   cmap=cm.gist_rainbow, antialiased=True, levels=cb_range, 
+# 				   #norm=matcolors.LogNorm(vmin=vmin, vmax=vmax),
+# 				   vmin=vmin,vmax=vmax, extend="both")
+# 	ax.add_patch(rect)
+# 	pl,= ax.plot(z_o_l_frc,Frc2,color="Black")
+# 	ax.set_ylabel(r"$\mathrm{Fr}^2_\Xi$ [-]")
+# 	ax.set_xlabel(r"$z_c^*$ [-]")
+# 	ax.set_title(r"$\mathrm{Fr}^2_{\Xi,crt}, \,\, F\left(\mathrm{Fr}^2_\Xi, \, z_c^*\right)$ [-]")
+# 	# ax.set_ylim([Y_ext.min(),Y_ext.max()])
+# 	# plt.colorbar()
+# 	plt.colorbar(cs,ax=ax)
+# 	return ax
+# ax_LN = plot_F(X_ext,Y_ext,Z_ext_LN,z_o_l_frc,Frc2)
+# # ax_NP = plot_F(X_ext,Y_ext,Z_ext_NP,z_o_l_frc,Frc2)
+# ************************ Plot the surface. ************************
 # surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm,
 #                        linewidth=0, antialiased=True)
 # ax1.plot([-6,-6],[0,4],color="black",linewidth=2)
 # ax1.legend([pl],[(r"$\mathrm{Fr}^2_{\Xi,crt}$")],
 #            handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,
 #            handlelength=3,loc="center",bbox_to_anchor=(0.5,1.05),frameon=False,fontsize=14)
-rect1 = patches.Rectangle((-6,0),2,4, linewidth=1, edgecolor='black', facecolor='none')
-rect2 = patches.Rectangle((-6,0),2,4, linewidth=1, edgecolor='black', facecolor='none')
-z_o_l_frc = linspace(-2*zl_max, -2*zl_min, 250); Frc2=zeros(250)
-for i in range(250):
-	(tmp, tmp, tmp,
-	 tmp, tmp,
-	 tmp, tmp, Frc2[i])=\
-	Calc_Para_Func(z_o_l_frc[i]/-2*100,100,lst,ul2_lst,rhoc,
-	               sig,kt,et,nu,cL,cEta,g,
-	               Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zl_min,zl_max)
-# pl,=ax1.plot(z_o_l_frc,Frc2,color="Black")
-cs1 = ax1.contourf(X_ext, Y_ext, Z_ext_LN, cmap=cm.gist_rainbow, antialiased=True, levels=121)
-cs2 = ax2.contourf(X_ext, Y_ext, Z_ext_NP, cmap=cm.gist_rainbow, antialiased=True, levels=121)
-ax1.add_patch(rect1)
-ax2.add_patch(rect2)
-pl2,= ax2.plot(z_o_l_frc,Frc2,color="Black")
 # Customize the z axis.
 # ax.set_zlim(-1.01, 1.01)
 # ax.zaxis.set_major_locator(LinearLocator(10))
 # A StrMethodFormatter is used automatically
 # ax.zaxis.set_major_formatter('{x:.02f}')
-ax1.set_ylabel(r"$\mathrm{Fr}^2_\Xi$ [-]")
-ax1.set_xlabel(r"$z_c^*$ [-]")
-ax2.set_ylabel(r"$\mathrm{Fr}^2_\Xi$ [-]")
-ax2.set_xlabel(r"$z_c^*$ [-]")
-ax1.set_title(r"$\mathrm{Fr}^2_{\Xi,crt}, \,\, F\left(\mathrm{Fr}^2_\Xi, \, z_c^*\right)$ [-]")
-ax1.set_ylim([Y_ext.min(),Y_ext.max()])
-ax2.set_ylim([Y_ext.min(),Y_ext.max()])
-
-# ======================== Validate the linear extrapolation ========================
-fig3=plt.figure(figsize=(8,4),dpi=300);
-axFr2=fig3.add_subplot(121); axzoa=fig3.add_subplot(122)
-# Fr2 slice:
-Fr2slice=32
-axFr2.plot(zoa_ext,Z_ext_LN[Fr2slice,:],marker='o',color='black',mfc='none',markevery=21)
-axFr2.set_xlabel(r"$z_c^*$ [-]"); axFr2.set_ylabel(r"$ F\left(\mathrm{Fr}^2_\Xi, \, z_c^*\right)$ [-]")
-ax1.plot(linspace(zoa_ext.min(),zoa_ext.max(),15),linspace(Fr2_ext[Fr2slice],Fr2_ext[Fr2slice],15),marker='o',color='black',mfc='none')
-# Zoa slice:
-zoaslice=382
-axzoa.plot(Fr2_ext,Z_ext_LN[:,zoaslice],marker='v',color='black',mfc='none',markevery=21)
-axzoa.set_xlabel(r"$\mathrm{Fr}^2_\Xi$ [-]"); axzoa.set_ylabel(r"$ F\left(\mathrm{Fr}^2_\Xi, \, z_c^*\right)$ [-]")
-ax1.plot(linspace(zoa_ext[zoaslice],zoa_ext[zoaslice],15),linspace(Fr2_ext.min(),Fr2_ext.max(),15),marker='v',color='black',mfc='none')
-# Fr2 slice:
-Fr2slice=128
-axFr2.plot(zoa_ext,Z_ext_LN[Fr2slice,:],marker='o',color='grey',mfc='none',markevery=21)
-axFr2.set_xlabel(r"$z_c^*$ [-]"); axFr2.set_ylabel(r"$ F\left(\mathrm{Fr}^2_\Xi, \, z_c^*\right)$ [-]")
-axFr2.plot([-4,-4],[0,7],color='blue'); axFr2.plot([-6,-6],[0,7],color='blue')
-ax1.plot(linspace(zoa_ext.min(),zoa_ext.max(),15),linspace(Fr2_ext[Fr2slice],Fr2_ext[Fr2slice],15),marker='o',color='grey',mfc='none')
-# Zoa slice:
-zoaslice=400
-axzoa.plot(Fr2_ext,Z_ext_LN[:,zoaslice],marker='v',color='grey',mfc='none',markevery=21)
-axzoa.set_xlabel(r"$\mathrm{Fr}^2_\Xi$ [-]"); axzoa.set_ylabel(r"$ F\left(\mathrm{Fr}^2_\Xi, \, z_c^*\right)$ [-]")
-axzoa.plot([0,0],[0,7],color='blue'); axzoa.plot([4,4],[0,7],color='blue')
-ax1.plot(linspace(zoa_ext[zoaslice],zoa_ext[zoaslice],15),linspace(Fr2_ext.min(),Fr2_ext.max(),15),marker='v',color='grey',mfc='none')
-#====================================================================================
-
+#endregion
+# ********************* Validate the linear extrapolation 
+#region
+# fig3=plt.figure(figsize=(8,4),dpi=300);
+# axFr2=fig3.add_subplot(121); axzoa=fig3.add_subplot(122)
+# axFr2.set_xlabel(r"$z_c^*$ [-]"); axFr2.set_ylabel(r"$ F\left(\mathrm{Fr}^2_\Xi, \, z_c^*\right)$ [-]")
+# axzoa.set_xlabel(r"$\mathrm{Fr}^2_\Xi$ [-]"); axzoa.set_ylabel(r"$ F\left(\mathrm{Fr}^2_\Xi, \, z_c^*\right)$ [-]")
+# def add_Fr2_slice(slc,ax,ax_2D,zoa_ext,Z_ext_LN):
+# 	ax.plot(zoa_ext,Z_ext_LN[slc,:],marker='o',mfc='none',markevery=21,color="black")
+# 	ymin = ax.get_ylim()[0]; ymax = ax.get_ylim()[1]
+# 	ax.plot([-4, -4], [ymin, ymax], color = 'grey', linestyle = '--')
+# 	ax.plot([-6, -6], [ymin, ymax], color = 'grey', linestyle = '--')
+# 	ax_2D.plot(linspace(zoa_ext.min(),zoa_ext.max(),15),linspace(Fr2_ext[slc],Fr2_ext[slc],15),
+# 			   marker='o',mfc='none',color="black")
+# def add_zoa_slice(slc,ax,ax_2D,Fr2_ext,Z_ext_LN):
+# 	ax.plot(Fr2_ext,Z_ext_LN[:,slc],marker='v',mfc='none',markevery=21,color="black")
+# 	ymin = ax.get_ylim()[0]; ymax = ax.get_ylim()[1]
+# 	ax.plot([0, 0], [ymin, ymax], color = 'grey', linestyle = '--')
+# 	ax.plot([4, 4], [ymin, ymax], color = 'grey', linestyle = '--')
+# 	ax_2D.plot(linspace(zoa_ext[slc],zoa_ext[slc],15),linspace(Fr2_ext.min(),Fr2_ext.max(),15),
+# 			   marker='v',mfc='none',color="black")
+# add_Fr2_slice(10,axFr2,ax_LN,zoa_ext,Z_ext_LN)
+# add_zoa_slice(33,axzoa,ax_LN,Fr2_ext,Z_ext_LN)
+#************************************************************************************
 # Add a color bar which maps values to colors.
-fig1.colorbar(cs1); fig2.colorbar(cs2)
 # fig1.colorbar(cs1,ticks=[Z.min(),0,1,2,3,4,Z.max()])
 # fig2.colorbar(cs2,ticks=[-0.8,0,0.8,1.6,2.4,3.2,4.0,4.8,5.6])
 # Regenerate the table:
 # Original table
-Refitcoefs=Table['Refitcoefs'][0];	FrXcoefs=Table['FrXcoefs'][0]
-Fr2_lst=Table['flxfr_data'][0,:]; zoa_lst=Table['z_a_data'][:,0]; F_tab=Table['F_lookuptable']
-savez("Ent_table_org.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr2_lst,\
-      z_a_data=zoa_lst, F_lookuptable=F_tab)
-# Nearest point table
-Z_ext = F_func_table_ext(Fr2_lst,Fr2_ext,zoa_lst,zoa_ext,F_tab,method="Nearest Point")
-savez("Ent_table_NP.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr2_ext,\
-      z_a_data=zoa_ext, F_lookuptable=Z_ext)
-# Linear Exrapolation table
-Z_ext = F_func_table_ext(Fr2_lst,Fr2_ext,zoa_lst,zoa_ext,F_tab,method="Linear Exrapolation")
-savez("Ent_table_LE.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr2_ext,\
-      z_a_data=zoa_ext, F_lookuptable=Z_ext)
-#====================== Figure 5: Vortex rising speeds ======================#
+# Refitcoefs=Table['Refitcoefs'][0];	FrXcoefs=Table['FrXcoefs'][0]
+# Fr2_lst=Table['flxfr_data'][0,:]; zcoa_lst=Table['z_a_data'][:,0]; F_tab=Table['F_lookuptable']
+# savez("Ent_table_org.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr2_lst,\
+#       z_a_data=zcoa_lst, F_lookuptable=F_tab)
+# # Nearest point table
+# Z_ext = F_func_table_ext(Fr2_lst,Fr2_ext,zcoa_lst,zoa_ext,F_tab,method="Nearest Point")
+# savez("Ent_table_NP.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr2_ext,\
+#       z_a_data=zoa_ext, F_lookuptable=Z_ext)
+# # Linear Exrapolation table
+# Z_ext = F_func_table_ext(Fr2_lst,Fr2_ext,zcoa_lst,zoa_ext,F_tab,method="Linear Exrapolation")
+# savez("Ent_table_LE.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr2_ext,\
+#       z_a_data=zoa_ext, F_lookuptable=Z_ext)
+#endregion
+# ********************* Vortex rising speeds 
+#region
 # rsp_vs_lam=zeros((def_size,3))
 # fig=plt.figure(figsize=(6,2.5),dpi=300)
 # plt.subplots_adjust(hspace=0.2,wspace=0.2)
 # axlst=[]; pltlst=[]
 # ax=fig.add_subplot(121); axlst.append(ax); ax=fig.add_subplot(122); axlst.append(ax) 
 # #const depth
-# zp_lst = [0.2, 1, 5]
 # for idepth in range(3):
 # 	lam_range=logspace(-3,log10(2*zp_lst[idepth]-1e-10),def_size)
 # 	for i in range(def_size):
@@ -206,7 +164,6 @@ savez("Ent_table_LE.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr
 # 	pltlst.append(pl)
 # axlst[0].set_xlabel(r"$\lambda \ \mathrm{[m]}$"); axlst[0].set_ylabel(r"$w(z',\lambda) \ \mathrm{[m/}s]$")
 # #const lambda
-# lam_lst = [0.2, 1, 5]
 # for ilambda in range(3):
 # 	zp_range=logspace(log10(lam_lst[ilambda]/2+1e-10),1,def_size)
 # 	for i in range(def_size):
@@ -220,35 +177,39 @@ savez("Ent_table_LE.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr
 # 				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.1))
 # axlst[0].set_xlim([1e-3,10]); axlst[1].set_xlim([0,10]); #axlst[0].set_xscale("log")
 # axlst[0].set_ylim([0,1.1]); axlst[1].set_ylim([0,1.1])
-#====================== Figure 6&7: parameter values and their function values ======================#
-# # zp_lam_lst = [zl_min, 2, 3, zl_max]
-# #Re_Gamma
-# B_list=zeros((def_size,3)); Recrt_list=zeros((def_size,3)); Re_list=zeros(def_size)
-# #We_Gamma
-# W_list=zeros(def_size); We_list=zeros(def_size)
-# #Fr^2_Xi
-# F_list=zeros((def_size,6)); Fr2_list=zeros((def_size,6)); Fr2_crt_list=zeros((def_size,6)) # 8: As a func of lambda(3) and depth(3)
-# # \lambda as the independent variable
-# lam_range=logspace(-4,1,def_size)
-# for j in range(3):
-# 	for i in range(def_size):
-# 		(B_list[i,j], Re_list[i], Recrt_list[i,j],
-# 		W_list[i], We_list[i],
-# 		F_list[i,j], Fr2_list[i,j], Fr2_crt_list[i,j])=\
-# 		Calc_Para_Func(zp_lst[j],lam_range[i],lst,ul2_lst,rhoc,
-# 					   sig,kt,et,nu,cL,cEta,g,
-# 					   Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zl_min,zl_max)
-# # zp as the independent variable
-# zp_range=logspace(-1,1,def_size)
-# for j in range(3):
-# 	for i in range(def_size):
-# 		(tmp, tmp, tmp,
-# 		tmp,tmp,
-# 		F_list[i,j+3], Fr2_list[i,j+3], Fr2_crt_list[i,j+3])=\
-# 		Calc_Para_Func(zp_range[i],lam_lst[j],lst,ul2_lst,rhoc,
-# 						 sig,kt,et,nu,cL,cEta,g,
-# 						 Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zl_min,zl_max)
-# # #$$$$$$$$$$$$$$$$$$ Figure 8: Parameters $$$$$$$$$$$$$$$$$$
+#endregion
+# ********************* parameter values and their function values (Calculation, not plot)
+#region
+# zp_lam_lst = [zl_min, 2, 3, zl_max]
+#Re_Gamma
+B_list=zeros((def_size,3)); Recrt_list=zeros((def_size,3)); Re_list=zeros(def_size)
+#We_Gamma
+W_list=zeros(def_size); We_list=zeros(def_size)
+#Fr^2_Xi
+F_list=zeros((def_size,6)); Fr2_list=zeros((def_size,6)); Fr2_crt_list=zeros((def_size,6)) # 8: As a func of lambda(3) and depth(3)
+# \lambda as the independent variable
+lam_range=logspace(-4,1,def_size)
+for j in range(3):
+	for i in range(def_size):
+		(B_list[i,j], Re_list[i], Recrt_list[i,j],
+		W_list[i], We_list[i],
+		F_list[i,j], Fr2_list[i,j], Fr2_crt_list[i,j], tau_vort)=\
+		Calc_Para_Func(zp_lst[j],lam_range[i],lst,ul2_lst,rhoc,
+					   sig,kt,et,nu,cL,cEta,g,
+					   Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,F_tab_NP,Fr2_crt_PolyExtra)
+# zp as the independent variable
+zp_range=logspace(-1,1,def_size)
+for j in range(3):
+	for i in range(def_size):
+		(tmp, tmp, tmp,
+		tmp,tmp,
+		F_list[i,j+3], Fr2_list[i,j+3], Fr2_crt_list[i,j+3], tau_vort)=\
+		Calc_Para_Func(zp_range[i],lam_lst[j],lst,ul2_lst,rhoc,
+					   sig,kt,et,nu,cL,cEta,g,
+					   Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,F_tab_NP,Fr2_crt_PolyExtra)
+#endregion
+# ********************* Parameters 
+#region
 # fig=plt.figure(figsize=(6,6), dpi=200)
 # plt.subplots_adjust(wspace=0.4, hspace=0.8)
 # axlst=[]; pltlst=[]
@@ -311,63 +272,65 @@ savez("Ent_table_LE.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr
 # 				[(r"$\mathrm{Fr}^2_\Xi,$"+r"$ \lambda={}, {}, {}m$".format(lam_lst[0],lam_lst[1],lam_lst[2])),
 # 				(r"$\mathrm{Fr}^2_{\Xi,crt},$"+r"$ \lambda={}, {}, {}m$".format(lam_lst[0],lam_lst[1],lam_lst[2]))],
 # 				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.25),labelspacing=0.2)
+#endregion
+# ********************* Function values 
+#region
+fig=plt.figure(figsize=(6,5), dpi=200)
+plt.subplots_adjust(wspace=0.4, hspace=0.6)
+axlst=[]; pltlst=[]
+ax=fig.add_subplot(221); axlst.append(ax); ax=fig.add_subplot(222); axlst.append(ax)
+ax=fig.add_subplot(223); axlst.append(ax); ax=fig.add_subplot(224); axlst.append(ax)
 
-# #$$$$$$$$$$$$$$$$$$ Figure 9: Function values $$$$$$$$$$$$$$$$$$
-# fig=plt.figure(figsize=(6,5), dpi=200)
-# plt.subplots_adjust(wspace=0.4, hspace=0.6)
-# axlst=[]; pltlst=[]
-# ax=fig.add_subplot(221); axlst.append(ax); ax=fig.add_subplot(222); axlst.append(ax)
-# ax=fig.add_subplot(223); axlst.append(ax); ax=fig.add_subplot(224); axlst.append(ax)
+# B
+for idepth in range(3):
+	# lam_range=logspace(-4,log10(2*zp_lst[idepth]),def_size)
+	pl,=axlst[0].plot(lam_range,B_list[:,idepth],color=colors[idepth+1]); pltlst.append(pl)
+	axlst[0].fill_between(lam_range, B_list[:,idepth], 
+						  where=((lam_range > zp_lst[idepth]/3)*(lam_range < zp_lst[idepth]/2)), color=colors[idepth+1], alpha=0.3)
+axlst[0].set_xscale("log"); axlst[0].set_yscale("linear"); axlst[0].set_xlim([1e-3,2*zp_lst[2]]); axlst[0].set_ylim([-0.2,1e-1])
+axlst[0].set_xlabel(r"$\lambda$ [m]"); axlst[0].set_ylabel(r"$B\left(\mathrm{Re}_\Gamma,\ z'/\lambda\right)$ [-]")
+axlst[0].legend([(pltlst[0],pltlst[1],pltlst[2])],[(r"$z'={}, {}, {}$m".format(zp_lst[0],zp_lst[1],zp_lst[2]))],
+				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.1))
 
-# # B
-# for idepth in range(3):
-# 	# lam_range=logspace(-4,log10(2*zp_lst[idepth]),def_size)
-# 	pl,=axlst[0].plot(lam_range,B_list[:,idepth],color=colors[idepth+1]); pltlst.append(pl)
-# 	axlst[0].fill_between(lam_range, B_list[:,idepth], 
-# 						  where=((lam_range > zp_lst[idepth]/3)*(lam_range < zp_lst[idepth]/2)), color=colors[idepth+1], alpha=0.3)
-# axlst[0].set_xscale("log"); axlst[0].set_yscale("log"); axlst[0].set_xlim([1e-3,2*zp_lst[2]]); axlst[0].set_ylim([1e-2,1e-1])
-# axlst[0].set_xlabel(r"$\lambda$ [m]"); axlst[0].set_ylabel(r"$B\left(\mathrm{Re}_\Gamma,\ z'/\lambda\right)$ [-]")
-# axlst[0].legend([(pltlst[0],pltlst[1],pltlst[2])],[(r"$z'={}, {}, {}$m".format(zp_lst[0],zp_lst[1],zp_lst[2]))],
-# 				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.1))
+# We_gamma
+pltlst=[]
+axlst[1].plot(lam_range,W_list,color="Black")
+pl,=axlst[1].plot([5.42e-3,5.42e-3],[min(W_list),max(W_list)],color="black",linestyle="--"); pltlst.append(pl)
+pl,=axlst[1].plot([38.3e-3,38.3e-3],[min(W_list),max(W_list)],color="black",linestyle=":");  pltlst.append(pl)
+axlst[1].set_xscale("log")
+axlst[1].set_xlim([1e-4,2*zp_lst[2]])
+axlst[1].set_xlabel(r"$\lambda$ [m]"); axlst[1].set_ylabel(r"$W\left(\mathrm{We}_\Gamma\right)$ [-]")
+axlst[1].legend([(pltlst[0],pltlst[1])],[(r"$\mathrm{Bo}_\Gamma = 1, 50$")],
+				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.1),labelspacing=0.2)
 
-# # We_gamma
-# pltlst=[]
-# axlst[1].plot(lam_range,W_list,color="Black")
-# pl,=axlst[1].plot([5.42e-3,5.42e-3],[min(W_list),max(W_list)],color="black",linestyle="--"); pltlst.append(pl)
-# pl,=axlst[1].plot([38.3e-3,38.3e-3],[min(W_list),max(W_list)],color="black",linestyle=":");  pltlst.append(pl)
-# axlst[1].set_xscale("log")
-# axlst[1].set_xlim([1e-4,2*zp_lst[2]])
-# axlst[1].set_xlabel(r"$\lambda$ [m]"); axlst[1].set_ylabel(r"$W\left(\mathrm{We}_\Gamma\right)$ [-]")
-# axlst[1].legend([(pltlst[0],pltlst[1])],[(r"$\mathrm{Bo}_\Gamma = 1, 50$")],
-# 				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.1),labelspacing=0.2)
+#Const depth
+pltlst=[]
+for idepth in range(3):
+	# lam_range=logspace(-4,log10(2*zp_lst[idepth]),def_size)
+	pl,=axlst[2].plot(lam_range,F_list[:,idepth],color=colors[idepth+1]); pltlst.append(pl)
+	axlst[2].fill_between(lam_range, 0,100,
+						  where=((lam_range > zp_lst[idepth]/3)*(lam_range < zp_lst[idepth]/2)), color=colors[idepth+1], alpha=0.3)
+axlst[2].set_xscale("log"); axlst[2].set_yscale("log"); 
+axlst[2].set_xlim([1e-2,2*zp_lst[2]]); axlst[2].set_ylim([1e-4,10])
+axlst[2].set_xlabel(r"$\lambda$ [m]"); axlst[2].set_ylabel(r"$F\left(\mathrm{Fr}^2_\Xi,z'/\lambda\right)$ [-]")
+axlst[2].legend([(pltlst[0],pltlst[1],pltlst[2])],[(r"$z'={}, {}, {}$m".format(zp_lst[0],zp_lst[1],zp_lst[2]))],
+				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.11),labelspacing=0.2)
 
-# #Const depth
-# pltlst=[]
-# for idepth in range(3):
-# 	# lam_range=logspace(-4,log10(2*zp_lst[idepth]),def_size)
-# 	pl,=axlst[2].plot(lam_range,F_list[:,idepth],color=colors[idepth+1]); pltlst.append(pl)
-# 	axlst[2].fill_between(lam_range, 0,100,
-# 						  where=((lam_range > zp_lst[idepth]/3)*(lam_range < zp_lst[idepth]/2)), color=colors[idepth+1], alpha=0.3)
-# axlst[2].set_xscale("log"); axlst[2].set_yscale("log"); 
-# axlst[2].set_xlim([1e-2,2*zp_lst[2]]); axlst[2].set_ylim([1e-4,10])
-# axlst[2].set_xlabel(r"$\lambda$ [m]"); axlst[2].set_ylabel(r"$F\left(\mathrm{Fr}^2_\Xi,z'/\lambda\right)$ [-]")
-# axlst[2].legend([(pltlst[0],pltlst[1],pltlst[2])],[(r"$z'={}, {}, {}$m".format(zp_lst[0],zp_lst[1],zp_lst[2]))],
-# 				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.11),labelspacing=0.2)
-
-# #Const vortex size
-# pltlst=[]
-# for ilam in range(3):
-# 	i = ilam+3; # zp_range=logspace(log10(lam_lst[ilam]/2+1e-10),1,def_size)
-# 	pl,=axlst[3].plot(zp_range,F_list[:,i],color=colors[ilam+1]); pltlst.append(pl)
-# 	axlst[3].fill_between(zp_range,F_list[:,i],
-# 						  where=((zp_range > lam_lst[ilam]*zl_min)*(zp_range < lam_lst[ilam]*zl_max)), color=colors[ilam+1], alpha=0.3)
-# axlst[3].set_xscale("log"); axlst[3].set_yscale("log"); 
-# axlst[3].set_xlim([1e-1,10]); axlst[3].set_ylim([1e-3,10])
-# axlst[3].set_xlabel(r"$z'$ [m]"); axlst[3].set_ylabel(r"$F\left(\mathrm{Fr}^2_\Xi,z'/\lambda\right)$ [-]")
-# axlst[3].legend([(pltlst[0],pltlst[1],pltlst[2])],[(r"$\lambda={}, {}, {}$m".format(lam_lst[0],lam_lst[1],lam_lst[2]))],
-# 				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.11),labelspacing=0.2)
-
-# #$$$$$$$$$$$$$$$$$$ Figure 10: Entrainment source for single vortex $$$$$$$$$$$$$$$$$$
+#Const vortex size
+pltlst=[]
+for ilam in range(3):
+	i = ilam+3; # zp_range=logspace(log10(lam_lst[ilam]/2+1e-10),1,def_size)
+	pl,=axlst[3].plot(zp_range,F_list[:,i],color=colors[ilam+1]); pltlst.append(pl)
+	axlst[3].fill_between(zp_range,F_list[:,i],
+						  where=((zp_range > lam_lst[ilam]*2)*(zp_range < lam_lst[ilam]*3)), color=colors[ilam+1], alpha=0.3)
+axlst[3].set_xscale("log"); axlst[3].set_yscale("log"); 
+axlst[3].set_xlim([1e-1,10]); axlst[3].set_ylim([1e-3,10])
+axlst[3].set_xlabel(r"$z'$ [m]"); axlst[3].set_ylabel(r"$F\left(\mathrm{Fr}^2_\Xi,z'/\lambda\right)$ [-]")
+axlst[3].legend([(pltlst[0],pltlst[1],pltlst[2])],[(r"$\lambda={}, {}, {}$m".format(lam_lst[0],lam_lst[1],lam_lst[2]))],
+				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(0.5,1.11),labelspacing=0.2)
+#endregion
+# ********************* Entrainment source for single vortex for fixed z/lam
+#region
 # fig=plt.figure(figsize=(6,4), dpi=200)
 # plt.subplots_adjust(wspace=0.4, hspace=0.3)
 # zlam_rlst = [2,2.5,3]
@@ -397,7 +360,7 @@ savez("Ent_table_LE.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr
 # 		 F, tmp, tmp)=\
 # 		Calc_Para_Func(depth_lst[i],lam_lst[i],lst,ul2_lst,rhoc,
 # 					   sig,kt,et,nu,cL,cEta,g,
-# 					   Refitcoefs,FrXcoefs,Fr2_lst,zoa_lst,F_tab,zl_min,zl_max)
+# 					   Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zl_min,zl_max)
 # 		A_lst[ir,i]   = pi*lam_lst[i]**3/6.0*F*B*W
 # 		Ast_lst[ir,i] = F*B*W
 # 		tau_vort=lam_lst[i]**(2.0/3.0)/et**(1.0/3.0)
@@ -410,3 +373,4 @@ savez("Ent_table_LE.npz",Refitcoefs=Refitcoefs, FrXcoefs=FrXcoefs, flxfr_data=Fr
 
 # axlst[0].legend([(pltlst[0],pltlst[1],pltlst[2])],[(r"$z'/\lambda={}, {}, {}$".format(zlam_rlst[0],zlam_rlst[1],zlam_rlst[2]))],
 # 				handler_map={tuple: HandlerTuple(ndivide=None)},borderpad=0.3,handlelength=4,loc="center",bbox_to_anchor=(1.15,1.2),labelspacing=0.2)
+#endregion

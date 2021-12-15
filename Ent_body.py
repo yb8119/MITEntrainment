@@ -67,7 +67,6 @@ def Turb_entrainment(Nx,Nt,kt,et,g,rhoc,rhod,sigma,z,nuc,nut,G,D,Dg,dt,Sl0,Table
 			# New model
 			J=Jent_numerical_New(kt[i],et[i],nuc,g,rhoc,sigma,Table,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP)
 			S[i] = J/v0;
-		# print ('>>>> i={:3d}, t={:.2f}s'.format(i,t.time()-t2))
 	print('Matrix build complete, time:{:.4f}s'.format(t.time()-t1))
 	time=zeros(Nt);	alpha0=zeros(Nt); alpha_mid=zeros(Nt); alpha_out=zeros((Nx,Nt))
 
@@ -89,7 +88,8 @@ def Turb_entrainment(Nx,Nt,kt,et,g,rhoc,rhod,sigma,z,nuc,nut,G,D,Dg,dt,Sl0,Table
 		alpha0[itime] 		= alpha[0]; #void fraction at the free surface
 		alpha_mid[itime] 	= alpha[int(Nx/2)];
 	# calculate the total source
-	Sg=zeros(Nx)
+	Sg=zeros(Nx); S_raw=zeros(Nx)
 	for ig in range(G):
 		Sg=Sg+S*(0.3-alpha)*phg[ig]*pz[:,ig]*vg[ig]
-	return time, alpha_out, alpha0, alpha_mid, Sg, VT
+		S_raw=S_raw+S*phg[ig]*pz[:,ig]*vg[ig]
+	return time, alpha_out, alpha0, alpha_mid, Sg, VT, S_raw
