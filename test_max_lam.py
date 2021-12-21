@@ -5,7 +5,7 @@ from Plt_funcs import Calc_Para_Func
 import matplotlib.pyplot as plt
 from matplotlib.legend_handler import HandlerTuple
 
-zlam_min = 30
+zlam_min = 2
 zlam_max = 50
 kt = 1.0 #m2/s2
 et = 4.0 #m2/s3

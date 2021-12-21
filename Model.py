@@ -1,7 +1,8 @@
-from numpy import sqrt, exp, log, pi, logspace, zeros, log10, interp, linspace
+from numpy import sqrt, exp, log, pi, logspace, zeros, log10, interp, linspace, mod
 from scipy.special import erfc
 from scipy.integrate import quad, quadrature
 from Utilities import findcLceta, ulambda_sq
+from scipy.interpolate import interp2d
 import matplotlib.pyplot as plt
 from numba import jit
 from time import process_time
@@ -234,16 +235,17 @@ def Fr_contribution(zcoa,Fr2,F_tab_NP,zcoa_lst,F_tab,Fr2_lst):
 	return F
 @jit(nopython=True, cache=True, nogil=True)
 def Re_contribution(zcoa,Refitcoefs,Reg):
-	b=Refitcoefs[1]+Refitcoefs[4]*zcoa
-	a=Refitcoefs[3]
-	if Reg < -b/2/a:
-		B=Refitcoefs[0] + Refitcoefs[1]*Reg + Refitcoefs[2]*zcoa + \
-		Refitcoefs[3]*Reg**2 + Refitcoefs[4]*Reg*zcoa
+	if zcoa < -13.502406389481719: # 1st root of the parabolic function
+		return 0
 	else:
-		B=Refitcoefs[0] + Refitcoefs[1]*(-b/2/a) + Refitcoefs[2]*zcoa + \
-		Refitcoefs[3]*(-b/2/a)**2 + Refitcoefs[4]*(-b/2/a)*zcoa
-	B=max(0.0,B)
-	return B
+		b=Refitcoefs[1]+Refitcoefs[4]*zcoa
+		a=Refitcoefs[3]
+		Re_crt = -b/2/a
+		Reg_eff = min(Reg, Re_crt)
+		B=Refitcoefs[0] + Refitcoefs[1]*Reg_eff + Refitcoefs[2]*zcoa + \
+		Refitcoefs[3]*Reg_eff**2 + Refitcoefs[4]*Reg_eff*zcoa
+		B=max(0.0,B)
+		return B
 @jit(nopython=True, cache=True, nogil=True)
 def We_contribution(Bog,Weg):
 	if Bog<1:
@@ -253,9 +255,40 @@ def We_contribution(Bog,Weg):
 	else:
 		W=1
 	return W
-####################################################################
+#####################################################################
+# multi value for "sector", deprecated
 @jit(nopython=True, cache=True, nogil=True)
-def Ent_Volume_intgrand_jit(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zcoa_lst,F_tab,F_tab_NP):
+def para_sec(v, vmin, vmax):
+	if v < vmin:
+		return -1
+	elif v >= vmin and v <= vmax:
+		return 0
+	elif v > vmax:
+		return 1
+@jit(nopython=True, cache=True, nogil=True)
+def F_filter(zcoa,Fr2,sector):
+	flg = False
+	zcoa_sec = para_sec(zcoa, -6, -4)
+	Fr2_sec = para_sec(Fr2, 0, 4)
+	
+	for i in range(sector.size):
+		if (sector[i] == 1 and zcoa_sec == -1 and Fr2_sec == 0):
+			flg = True
+		if (sector[i] == 2 and zcoa_sec ==  0 and Fr2_sec == 0):
+			flg = True
+		if (sector[i] == 3 and zcoa_sec ==  1 and Fr2_sec == 0):
+			flg = True
+		if (sector[i] == 4 and zcoa_sec == -1 and Fr2_sec == 1):
+			flg = True
+		if (sector[i] == 5 and zcoa_sec ==  0 and Fr2_sec == 1):
+			flg = True
+		if (sector[i] == 6 and zcoa_sec ==  1 and Fr2_sec == 1):
+			flg = True
+		if (flg):
+			return flg
+	return flg
+@jit(nopython=True, cache=True, nogil=True)
+def Ent_Volume_intgrand_jit(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zcoa_lst,F_tab,F_tab_NP,sector):
 	zp=exp(logzp)
 	zcoa=-1*zp/(l/2)
 	# ===== Reynolds number dependence =====
@@ -267,6 +300,11 @@ def Ent_Volume_intgrand_jit(logzp,l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoef
 	wz=interp(zp,zp_lst,wz_lst)
 	# wz = get_rise_speed(l,2*zp,kt,et,nu,cL,cEta,method=2)
 	Fr2=circ_p*wz/(l**2/4*g)
+	if sector >= 1:
+		if sector >= 4 and Fr2 < 4:
+			return 0
+		elif sector <= 3 and Fr2 > 4:
+			return 0
 	F = Fr_contribution(zcoa,Fr2,F_tab_NP,zcoa_lst,F_tab,Fr2_lst)
 	V_Ent=pi*l**3/6.0*F*B*W
 	if V_Ent < 0:
@@ -320,46 +358,66 @@ def Fr2_crit_getter(l,zp,FrXcoefs,Fr2_crt_PolyExtra):
 			Fr2_crit  = base_r+slope_r*dzcoa
 	return Fr2_crit
 ####################################################################
-def Fr2_minus_Fr2_crit(zp,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra):
+def Fr2_minus_Fr2_crit(zp,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra,sector):
 	wz =  get_rise_speed(l,2*zp,kt,et,nu,cL,cEta,method=2)
 	Fr2 = circ_p*wz/(l**2/4*g)
-	Fr2crt = Fr2_crit_getter(l,zp,FrXcoefs,Fr2_crt_PolyExtra)
+	if sector >= 4:
+		Fr2crt = 4.0
+	else:
+		Fr2crt = Fr2_crit_getter(l, zp, FrXcoefs, Fr2_crt_PolyExtra)
 	return Fr2 - Fr2crt
 ####################################################################
 from scipy.optimize import brenth
-def root_find(l,zp_min,zp_max,kt,et,nu,cL,cEta,circ_p,g,FrXcoefs,Fr2_crt_PolyExtra):
+def root_find(l,zp_min,zp_max,kt,et,nu,cL,cEta,circ_p,g,FrXcoefs,Fr2_crt_PolyExtra,sector):
 	# See if there is root within the segment
-	diff_left  = Fr2_minus_Fr2_crit(zp_min,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra)
-	diff_right = Fr2_minus_Fr2_crit(zp_max,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra)
+	diff_left  = Fr2_minus_Fr2_crit(zp_min,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra,sector)
+	diff_right = Fr2_minus_Fr2_crit(zp_max,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra,sector)
 	if (diff_left*diff_right < 0.0 ):
 		root = brenth(Fr2_minus_Fr2_crit,zp_min,zp_max,
-					  args=(l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra),
+					  args=(l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra,sector),
 					  rtol=1e-4)
 		has_root = True
 	else:
 		has_root = False; root = -1.0
 	return has_root, root
 ####################################################################
-def int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra):
-	# Search for integration based on Fr and Fr_crit
+@jit(nopython=True, cache=True, nogil=True)
+def zl_sector(zlam_min,zlam_max,sector):
+	if sector < 1 : # skip sector selection
+		return zlam_min, zlam_max
+	else:
+		i = mod(sector-1,3)
+		if i==0:
+			zl_min = max(3,zlam_min)
+			zl_max = max(3,zlam_max)
+		elif i == 1:
+			zl_min = 2
+			zl_max = 3
+		elif i == 2:
+			zl_min = min(2,zlam_min)
+			zl_max = min(2,zlam_max)
+		return zl_min,zl_max			
+def int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra,sector):
+	# Search for integration range based on Fr and Fr_crit
 	# Search is divided into regions
 	# Number of regions is determined by
 	# whether Poly extrapolation for Fr2_crt is used (6 regions) or not (3 regions)
 	# Fr **always** increases with depth
+	zl_min,zl_max=zl_sector(zlam_min,zlam_max,sector)
 	if Fr2_crt_PolyExtra: # At most 6 regions
 		zl_breakpoints=[2.03417342, 2.19577958, 2.56982698, 3.03826383, 3.11406141]; num_zl_bpts=5
 	else: # At most 6 regions
 		zl_breakpoints=[2.03417342, 2.19577958, 2.56982698]; num_zl_bpts=3
-	zl_list=[zlam_min]; zl_list_size=1
-	for i in range(num_zl_bpts): # Find the range considering zlam_min and zlam_max
-		if zl_breakpoints[i] > zlam_min and zl_breakpoints[i] < zlam_max:
+	zl_list=[zl_min]; zl_list_size=1
+	for i in range(num_zl_bpts): # Find the range considering zl_min and zl_max
+		if zl_breakpoints[i] > zl_min and zl_breakpoints[i] < zl_max:
 			zl_list.append(zl_breakpoints[i]);	zl_list_size += 1
-	zl_list.append(zlam_max);	zl_list_size += 1
+	zl_list.append(zl_max);	zl_list_size += 1
 	
 	roots_list=[]; num_roots=0;
 	for i in range(zl_list_size-1): # Find the roots
 		has_root, root = root_find(l,zl_list[i]*l,zl_list[i+1]*l,kt,et,nu,cL,cEta,
-									circ_p,g,FrXcoefs,Fr2_crt_PolyExtra)
+									circ_p,g,FrXcoefs,Fr2_crt_PolyExtra,sector)
 		if has_root:
 			# print("zlam {:.3e} to {:.3e} has root ==> zp_root: {:.4e}".format(zl_list[i],zl_list[i+1],root))
 			# dif = Fr2_minus_Fr2_crit(root,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra)
@@ -367,23 +425,22 @@ def int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_
 			roots_list.append(root); num_roots += 1;
 	
 	num_seg=0; zp_seg=[]
-	roots_list.insert(0,zlam_min*l)
-	roots_list.append(zlam_max*l)
+	roots_list.insert(0,zl_min*l)
+	roots_list.append(zl_max*l)
 	for i in range(num_roots+1):
-		mid=0.5*(roots_list[i] + roots_list[i+1])
-		diff_mid = Fr2_minus_Fr2_crit(mid,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra)
+		mid = 0.5*(roots_list[i] + roots_list[i+1])
+		diff_mid = Fr2_minus_Fr2_crit(mid,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra,sector)
 		if diff_mid > 0:
 			# print("Seg found from {:.3e} to {:.3e} at {:.3e}".format(roots_list[i], roots_list[i+1], mid))
 			num_seg = num_seg+1;
 			zp_seg.append((roots_list[i], roots_list[i+1]))
 	return num_seg, zp_seg
 ####################################################################
-def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP):
+def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector):
 	Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
 	# Figure out number of segments in integration
-	num_seg, zp_seg = int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra)
+	num_seg, zp_seg = int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra,sector)
 	if num_seg == 0:
-		print("Fr2 too small")
 		return 0
 	V_int = 0
 	# Integrate in each segment
@@ -394,7 +451,7 @@ def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_l
 		for iz in range(nwz):
 			wz_lst[iz] = get_rise_speed(l,2*zp_lst[iz],kt,et,nu,cL,cEta,method=2)
 		V_int=V_int+quad(Ent_Volume_intgrand_jit, log(zp_seg[iseg][0]), log(zp_seg[iseg][1]), \
-		                 args=(l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zcoa_lst,F_tab,F_tab_NP), \
+		                 args=(l,zp_lst,wz_lst,g,circ_p,Reg,Bog,Weg,Refitcoefs,Fr2_lst,zcoa_lst,F_tab,F_tab_NP,sector), \
 		                 limit = 100,epsrel = 1e-5)[0]
 	#---- Breakage probability ----#
 	PB=erfc(x)+2/sqrt(pi)*x*exp(-(x**2))
@@ -407,10 +464,12 @@ def max_lambda(kt,et,nu,g,cL,cEta,zlam_min,zlam_max,FrXcoefs,Fr2_crt_PolyExtra):
 		return 100 * L # Too complicated
 	else:
 		lmax = 100 * L
-		if zlam_min<2 and zlam_max > 3:
+		if zlam_min<=2 and zlam_max >= 3:
 			zlam = 2.57
-		elif zlam_min > 3:
+		elif zlam_min >= 3:
 			zlam = zlam_min
+		elif zlam_max <=2:
+			zlam = 2
 		else:
 			print("Not implemented yet!!!")
 			return -1
@@ -424,16 +483,17 @@ def max_lambda(kt,et,nu,g,cL,cEta,zlam_min,zlam_max,FrXcoefs,Fr2_crt_PolyExtra):
 		# Fr2 = pi*pi*lmax*ulam*wz/g/lmax/lmax
 		# Fr2_approx = pi*pi*lmax**(4/3)*et**(1/3)*sqrt(2)*wz/g/lmax**2
 		# print("Fr2: {:.4e}, {:.4e}, Fr2_crt {:.4e}".format(Fr2,Fr2_approx,Fr2_cr))\
-		print("x4:{:.3e}".format(lmax))
 		return lmax
 ####################################################################
-def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP):
+def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP,sector):
 	if (wmeth!=2 and wmeth>0):
 		print('Not working in this mode.')
 		return -1
 	Refitcoefs=Table['Refitcoefs'];	FrXcoefs=Table['FrXcoefs']
 	Fr2_lst=Table['flxfr_data']; zcoa_lst=Table['z_a_data']; F_tab=Table['F_lookuptable']
 	cL,cEta=findcLceta(kt,et,nu,mode=1)
+	# Note: for zp/lam > 6.751203194740859 the B is less than 0, therefore integrating over this point is meanning less.
+	zlam_max = min (6.751203194740859,zlam_max)
 	x1=sqrt(4*sig/rhoc/g); x2=sqrt(200*sig/rhoc/g); x4=max_lambda(kt,et,nu,g,cL,cEta,zlam_min,zlam_max,FrXcoefs,Fr2_crt_PolyExtra); # Lambda range
 	# For speed get a table of ulambda_square
 	nlst=400
@@ -441,13 +501,13 @@ def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,zlam_min,zlam_max,wmeth,Fr2_crt
 	lst=logspace(log10(x1),log10(x4),nlst);	ul2_lst=zeros(nlst) #with dimension!
 	for i in range(nlst):
 		ul2_lst[i]=ulambda_sq(lst[i],kt,et,cL,cEta,nu,pope_spec=1.01)
-	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP):
-		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP)*exp(u)
+	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector):
+		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector)*exp(u)
 	J=quadrature(intgrd,  log(x1), log(x2),
-	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP),
+	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector),
 	             vec_func=False,maxiter=51,rtol=1e-3)[0] +\
 	quadrature(intgrd,  log(x2), log(x4),
-	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP),
+	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector),
 	            vec_func=False,maxiter=52,rtol=1e-3)[0]
 	return J
 ####################################################################
@@ -470,3 +530,53 @@ def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,zlam_min,zlam_max,wmeth,Fr2_crt
 # 	else:
 # 		zcoa_l = 0; base_l = 0; slope_l = 0; zcoa_r = 0; base_r = 0; slope_r = 0
 # 	return zcoa_l,base_l,slope_l,zcoa_r,base_r,slope_r
+def F_func_table_ext(Fr2_lst,Fr2_tgt,zcoa_lst,zcoa_tgt,F_tab,method,sector):
+	d1  = zcoa_tgt.size-1;	d2  = Fr2_tgt.size-1
+	d1o = zcoa_lst.size-1;	d2o = Fr2_lst.size-1
+	F_tab_out=zeros((d1+1,d2+1))
+	if method == "Linear Exrapolation":
+		# z_a_data goes from -6 to -4; flxfr_data goes from 0 to 4
+		# extrapolate zoa dimension first 
+		for iz in range(d1+1):
+			izcoa=-1; zcoa = zcoa_tgt[iz]
+			if zcoa >= zcoa_lst[d1o-1]:
+				izcoa=d1o-1; zcoa_lw=(zcoa_lst[d1o]-zcoa)/(zcoa_lst[d1o]-zcoa_lst[d1o-1]); 
+			elif zcoa <= zcoa_lst[0]:
+				izcoa=0; 	zcoa_lw=(zcoa_lst[1] -zcoa)/(zcoa_lst[1] -zcoa_lst[0]); 
+			if izcoa == -1: #within the range
+				for i in range(d1o):
+					if zcoa>=zcoa_lst[i] and zcoa<zcoa_lst[i+1]:
+						izcoa=i; zcoa_lw=(zcoa_lst[i+1]-zcoa)/(zcoa_lst[i+1]-zcoa_lst[i])
+			if izcoa == -1:
+				print('Sthg is very wrong(zcoa), {}, {}'.format(izcoa, zcoa_lw))
+			F_lst=F_tab[izcoa,:]*zcoa_lw+F_tab[izcoa+1,:]*(1-zcoa_lw)
+			# F=interp(Fr2,Fr2_lst,F_lst)
+			for jf in range(d2+1):
+				jfr=-1; Fr2 = Fr2_tgt[jf]
+				if Fr2 >= Fr2_lst[d2o-1]:
+					jfr=d2o-1; fr2_lw=(Fr2_lst[d2o]-Fr2)/(Fr2_lst[d2o]-Fr2_lst[d2o-1]); 
+				elif Fr2 <= Fr2_lst[0]:
+					jfr=0; 	fr2_lw=(Fr2_lst[1] -Fr2)/(Fr2_lst[1] -Fr2_lst[0]); 
+				if jfr == -1: #within the range
+					for i in range(len(Fr2_lst)-1):
+						if Fr2>=Fr2_lst[i] and Fr2<Fr2_lst[i+1]:
+							jfr=i; fr2_lw=(Fr2_lst[i+1]-Fr2)/(Fr2_lst[i+1]-Fr2_lst[i])
+				if jfr == -1:
+					print('Sthg is very wrong (Fr2)')
+				flg = F_filter(zcoa,Fr2,sector)
+				if (flg):
+					F_tab_out[iz, jf] = max(0.0, F_lst[jfr]*fr2_lw+F_lst[jfr+1]*(1-fr2_lw))
+				else:
+					F_tab_out[iz, jf] = 0.0
+	elif method == "Nearest Point":
+		# RectBivariateSpline use nearest point by default.
+		X = zcoa_lst
+		Y = Fr2_lst
+		# f = RectBivariateSpline(X, Y, F_tab)
+		f = interp2d(X, Y, F_tab.T)
+		for i in range(d1+1):
+			for j in range(d2+1):
+				F_tab_out[i,j] = f(zcoa_tgt[i],Fr2_tgt[j])
+	else:
+		print("ERROR: Wrong method parameter involked!")
+	return F_tab_out

@@ -1,4 +1,4 @@
-from numpy import zeros, linspace, loadtxt, interp, insert, savez, load
+from numpy import array, zeros, linspace, loadtxt, interp, insert, savez, load, array, mod, floor
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 from Ent_body import Turb_entrainment
@@ -36,9 +36,10 @@ for i in range(Nx):
 	if z[i] > 0.5 :
 		nut[i] = nuc
 # kt=zeros(Nx); 	kt[:]  = 1.2346934417890287; et=zeros(Nx); 	et[:]  = 1.8320709103157145; nut=zeros(Nx); 	nut[:] = 0.07489538904880445
-kt=zeros(Nx); 	kt[:]  = 1.0; et=zeros(Nx); 	et[:]  = 4.0; nut=zeros(Nx); 	nut[:] = 0.07489538904880445
+# kt=zeros(Nx); 	kt[:]  = 1.0; et=zeros(Nx); 	et[:]  = 4.0; nut=zeros(Nx); 	nut[:] = 0.07489538904880445
 Fr2_crt_PolyExtra = False
 F_tab_NP = True    # Using Nearest-Point for F table
+sector=array([1,2,3,4,5])
 wmeth = 2			# rising speed model
 # Load the depth table:
 # Table=loadmat("UoIEntrainment.mat");
@@ -130,9 +131,9 @@ print(" >> Fr2           dimension: {:}, range: {:}, {:}".format(Table['flxfr_da
 # fig2=plt.figure(figsize=(3,3),dpi=300)#; plt.subplots_adjust(wspace=0.3,hspace=0.4)
 # ax3=fig2.add_subplot(111); ax3.set_title(r"$\left(z/\lambda\right)_{min} =$"+"{:}".format(zlam_min)+ ", "+\
 #                                          r"$\left(z/\lambda\right)_{max} =$"+"{:}".format(zlam_max))
-# ax3.plot(z,alpha_out1[:,Nt-1]*100,      color='black', linestyle='-',
-# 		 # label=r'$t={:.1f}s$, Castro et al. (2016)'.format(time[Nt-1]))
-# 		 label=r'Castro et al. (2016)')
+# # ax3.plot(z,alpha_out1[:,Nt-1]*100,      color='black', linestyle='-',
+# # 		 # label=r'$t={:.1f}s$, Castro et al. (2016)'.format(time[Nt-1]))
+# # 		 label=r'Castro et al. (2016)')
 # ax3.plot(z,alpha_out4[:,Nt-1]*100,      color='red', linestyle='-',
 # 		 # label=r'$t={:.1f}s$, This work'.format(time[Nt-1]))
 # 		 label=r'This work')
@@ -191,26 +192,86 @@ print(" >> Fr2           dimension: {:}, range: {:}, {:}".format(Table['flxfr_da
 # zlam_max_range=[3,6,12,24]
 # zlam_min_range=[1,   30, 100, 500, 2980]
 # zlam_max_range=[21,  50, 120, 520, 3000]
-zlam_min_range=[30]
-zlam_max_range=[50]
-alpha_d_convg=[]
-Source_convg=[] # Note: Without void fraction correction
-Source_convg_corrected=[] # Note: With void fraction correction
-for irange in range(len(zlam_max_range)):
+# zlam_min_range=[2,  3,   0.5, 2]
+# zlam_max_range=[3,  6.75, 2,  6.75]
+# alpha_d_convg=[]
+# Source_convg=[] # Note: Without void fraction correction
+# Source_convg_corrected=[] # Note: With void fraction correction
+# for irange in range(len(zlam_max_range)):
+# 	time, alpha_out4, alpha04, alpha_mid4, S4, VT, S_raw = \
+# 	Turb_entrainment(Nx,Nt,kt,et,g,rhoc,rhod,sigma,z,nuc,nut,G,D,Dg,dt,Sl0,Table,
+# 					 2,zlam_min_range[irange],zlam_max_range[irange],wmeth,Fr2_crt_PolyExtra,F_tab_NP)
+# 	alpha_d_convg.append(alpha_out4)
+# 	Source_convg.append(S_raw)
+# 	Source_convg_corrected.append(S4)
+# # === plot part ===
+# Terrill = [[1.07, 0.96, 0.81, 0.562, 0.435, 0.309, 0.167, 0.053],
+#            [0.0298, 0.0282, 0.0366, 0.697, 6.32, 11.2, 13, 18.5]]
+# Johansen = [[0.1016, 0.4064, 0.5588, 0.7112, 0.1016, 0.4064, 0.7112], 
+# 			[11.65, 3.54244, 0.8087, 0.03, 12.475, 4.101, 2.474]]
+# color_plate = ['red', 'green', 'blue', 'purple', 'black']
+# fig_convg = plt.figure(figsize=(4, 3), dpi=300)
+# axconvg = fig_convg.add_subplot(111)
+# axconvg.set_title(plt_title)
+# axconvg.plot(Terrill[0], Terrill[1], color='black',
+#              linestyle='none', marker='o', ms=5, label='Terrill (2005)')
+# axconvg.plot(Johansen[0], Johansen[1], color='black', linestyle='none',
+#              marker='o', mfc='none', ms=5, label='Johansen et al. (2010)')
+# axconvg.set_xlabel('Depth [m]')
+# axconvg.set_ylabel(r'$\alpha_d$ [%]')
+# axconvg.set_xlim([min(z), max(z)])
+# axconvg.set_ylim([-1, 30])
+
+# fig_convg_src = plt.figure(figsize=(4, 3), dpi=300)
+# axconvg_src = fig_convg_src.add_subplot(111)
+# axconvg_src.set_title(plt_title)
+# axconvg_src.set_xlabel('Depth [m]')
+# axconvg_src.set_ylabel(r'$S_{\alpha_d}$ [1/s]')
+# axconvg_src.set_xlim([min(z), max(z)])
+# axconvg_src.set_ylim([1e-2, 12]); axconvg_src.set_yscale('log')
+
+# for irange in range(len(zlam_max_range)):
+# 	axconvg.plot(z, alpha_d_convg[irange][:, Nt-1]*100,
+#               color=color_plate[irange], label=r"$\left(z/\lambda\right)_{min,max}=$"+r"{:4g}, {:4g}".format(zlam_min_range[irange],zlam_max_range[irange]))
+# 	axconvg_src.plot(z, Source_convg[irange],
+#               color=color_plate[irange], label=r"$\left(z/\lambda\right)_{min,max}=$"+r"{:4g}, {:4g}".format(zlam_min_range[irange],zlam_max_range[irange]))
+# 	axconvg_src.plot(z, Source_convg_corrected[irange],
+#               color=color_plate[irange], linestyle='--')
+# axconvg.legend(labelspacing=0.15, borderpad=0.2, handletextpad=0.4,
+#                loc='center', bbox_to_anchor=(0.67, 0.72))
+# axconvg_src.legend(labelspacing=0.15, borderpad=0.2, handletextpad=0.4,
+#                loc='center', bbox_to_anchor=(0.67, 0.72))
+# tmp = 0;  icheck=2
+# for irange in range(len(zlam_max_range)):
+# 	if irange != len(zlam_max_range)-1:
+# 		tmp += Source_convg[irange][icheck]
+# 		print("Src: {:.4e}, Sum: {:.4e}".format(Source_convg[irange][icheck], tmp))
+# 	else:
+# 		print("Src: {:.4e}".format(Source_convg[irange][icheck]))
+
+# ======================================== Contribution from each F segment ========================================
+zlam_min = 1; zlam_max = 6.75
+alpha_d_sec=[]
+Source_sec=[] # Note: Without void fraction correction
+Source_sec_corrected=[] # Note: With void fraction correction
+for isec in range(7):
 	time, alpha_out4, alpha04, alpha_mid4, S4, VT, S_raw = \
 	Turb_entrainment(Nx,Nt,kt,et,g,rhoc,rhod,sigma,z,nuc,nut,G,D,Dg,dt,Sl0,Table,
-					 2,zlam_min_range[irange],zlam_max_range[irange],wmeth,Fr2_crt_PolyExtra,F_tab_NP)
-	alpha_d_convg.append(alpha_out4)
-	Source_convg.append(S_raw)
-	Source_convg_corrected.append(S4)
-# === plot part ===
+					 2,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP,isec)
+	alpha_d_sec.append(alpha_out4)
+	Source_sec.append(S_raw)
+	Source_sec_corrected.append(S4)
+#################################
+# =+=+=+=+= plot part =+=+=+=+= #
+#################################
 Terrill = [[1.07, 0.96, 0.81, 0.562, 0.435, 0.309, 0.167, 0.053],
            [0.0298, 0.0282, 0.0366, 0.697, 6.32, 11.2, 13, 18.5]]
 Johansen = [[0.1016, 0.4064, 0.5588, 0.7112, 0.1016, 0.4064, 0.7112], 
 			[11.65, 3.54244, 0.8087, 0.03, 12.475, 4.101, 2.474]]
-color_plate = ['red', 'green', 'blue', 'purple', 'black']
-fig_convg = plt.figure(figsize=(4, 3), dpi=300)
-axconvg = fig_convg.add_subplot(111)
+color_plate = ['red', 'green', 'blue', 'purple', 'cyan', 'black']
+listy_plate = ['--',':']
+fig_sec = plt.figure(figsize=(4, 3), dpi=300)
+axconvg = fig_sec.add_subplot(111)
 axconvg.set_title(plt_title)
 axconvg.plot(Terrill[0], Terrill[1], color='black',
              linestyle='none', marker='o', ms=5, label='Terrill (2005)')
@@ -221,29 +282,32 @@ axconvg.set_ylabel(r'$\alpha_d$ [%]')
 axconvg.set_xlim([min(z), max(z)])
 axconvg.set_ylim([-1, 30])
 
-fig_convg_src = plt.figure(figsize=(4, 3), dpi=300)
-axconvg_src = fig_convg_src.add_subplot(111)
+fig_sec_src = plt.figure(figsize=(4, 3), dpi=300)
+axconvg_src = fig_sec_src.add_subplot(111)
 axconvg_src.set_title(plt_title)
 axconvg_src.set_xlabel('Depth [m]')
 axconvg_src.set_ylabel(r'$S_{\alpha_d}$ [1/s]')
 axconvg_src.set_xlim([min(z), max(z)])
 axconvg_src.set_ylim([1e-2, 12]); axconvg_src.set_yscale('log')
 
-for irange in range(len(zlam_max_range)):
-	axconvg.plot(z, alpha_d_convg[irange][:, Nt-1]*100,
-              color=color_plate[irange], label=r"$\left(z/\lambda\right)_{min,max}=$"+r"{:4g}, {:4g}".format(zlam_min_range[irange],zlam_max_range[irange]))
-	axconvg_src.plot(z, Source_convg[irange],
-              color=color_plate[irange], label=r"$\left(z/\lambda\right)_{min,max}=$"+r"{:4g}, {:4g}".format(zlam_min_range[irange],zlam_max_range[irange]))
-	axconvg_src.plot(z, Source_convg_corrected[irange],
-              color=color_plate[irange], linestyle='--')
+axconvg.plot(z, alpha_d_sec[0][:, Nt-1]*100,
+              color='black', linestyle='-', label=r"All Sec")
+axconvg_src.plot(z, Source_sec[0],
+			color='black', linestyle='-', label=r"All Sec", linewidth = 2)
+
+Src_sum = zeros(len(Source_sec[0]))
+for isec in range(1,7):
+	ic = mod((isec-1),3) ; il = int(floor((isec-1)/3))
+	axconvg.plot(z, alpha_d_sec[isec][:, Nt-1]*100,
+              color=color_plate[ic], linestyle=listy_plate[il], label=r"Sec {}".format(isec))
+	axconvg_src.plot(z, Source_sec[isec],
+              color=color_plate[ic], linestyle=listy_plate[il], label=r"Sec {}".format(isec))
+	Src_sum+=Source_sec[isec]
+	# axconvg_src.plot(z, Source_sec_corrected[isec],
+    #           color=color_plate[ic], linestyle='--')
+axconvg_src.plot(z, Src_sum,
+			color='cyan', linestyle='-.', label=r"Sum")
 axconvg.legend(labelspacing=0.15, borderpad=0.2, handletextpad=0.4,
-               loc='center', bbox_to_anchor=(0.67, 0.72))
+               loc='center', bbox_to_anchor=(0.67, 0.60))
 axconvg_src.legend(labelspacing=0.15, borderpad=0.2, handletextpad=0.4,
-               loc='center', bbox_to_anchor=(0.67, 0.72))
-tmp = 0;  icheck=2
-for irange in range(len(zlam_max_range)):
-	if irange != len(zlam_max_range)-1:
-		tmp += Source_convg[irange][icheck]
-		print("Src: {:.4e}, Sum: {:.4e}".format(Source_convg[irange][icheck], tmp))
-	else:
-		print("Src: {:.4e}".format(Source_convg[irange][icheck]))
+               loc='center', bbox_to_anchor=(0.67, 0.63))
