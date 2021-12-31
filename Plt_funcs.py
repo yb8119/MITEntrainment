@@ -13,6 +13,18 @@ def Calc_Para_Func(zp,l,lst,ul2_lst,rhoc,sig,kt,et,nu,cL,cEta,g,Refitcoefs,FrXco
 	Fr2=circ_p*wz/(l**2/4*g)
 	F = Fr_contribution(zcoa,Fr2,F_tab_NP,zcoa_lst,F_tab,Fr2_lst)
 	Fr2_crit = Fr2_crit_getter(l,zp,FrXcoefs,Fr2_crt_PolyExtra)
-	return B, Reg, -b/2/a, \
-            W, Weg, \
-            F, Fr2, Fr2_crit, tau_vort
+	if Fr2 < Fr2_crit:
+		F=0
+	return	B, Reg, -b/2/a, \
+        	W, Weg, \
+            F, Fr2, Fr2_crit, tau_vort, n_lam
+
+
+def myax(ax,xlab="none",ylab='none',xrange=(0,1),yrange=(0,1),xscale='linear',yscale='linear'):
+	ax.set_xlabel(xlab)
+	ax.set_ylabel(ylab)
+	ax.set_xlim(xrange)
+	ax.set_ylim(yrange)
+	ax.set_xscale(xscale)
+	ax.set_yscale(yscale)
+	

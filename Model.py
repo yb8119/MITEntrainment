@@ -320,8 +320,8 @@ def J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig):
 	#---- Circulation (parallel component) ----#
 	circ_p=pi*pi/4*l*ulam
 	#---- Eddy lifetime
-	# tau_vort=l**(2.0/3.0)/et**(1.0/3.0)
-	tau_vort=ulamsq*0.5/et
+	tau_vort=l**(2.0/3.0)/et**(1.0/3.0)
+	# tau_vort=ulamsq*0.5/et
 	#---- MIT model input ----#
 	Reg=circ_p/nu; 				Weg=circ_p**2*rhoc/(0.5*l*sig)
 	Bog=g*(l/2)**2/(sig/rhoc)
@@ -397,13 +397,12 @@ def zl_sector(zlam_min,zlam_max,sector):
 			zl_min = min(2,zlam_min)
 			zl_max = min(2,zlam_max)
 		return zl_min,zl_max			
-def int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra,sector):
+def int_seg_find(l,zl_min,zl_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra,sector):
 	# Search for integration range based on Fr and Fr_crit
 	# Search is divided into regions
 	# Number of regions is determined by
 	# whether Poly extrapolation for Fr2_crt is used (6 regions) or not (3 regions)
 	# Fr **always** increases with depth
-	zl_min,zl_max=zl_sector(zlam_min,zlam_max,sector)
 	if Fr2_crt_PolyExtra: # At most 6 regions
 		zl_breakpoints=[2.03417342, 2.19577958, 2.56982698, 3.03826383, 3.11406141]; num_zl_bpts=5
 	else: # At most 6 regions
@@ -419,9 +418,6 @@ def int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_
 		has_root, root = root_find(l,zl_list[i]*l,zl_list[i+1]*l,kt,et,nu,cL,cEta,
 									circ_p,g,FrXcoefs,Fr2_crt_PolyExtra,sector)
 		if has_root:
-			# print("zlam {:.3e} to {:.3e} has root ==> zp_root: {:.4e}".format(zl_list[i],zl_list[i+1],root))
-			# dif = Fr2_minus_Fr2_crit(root,l,kt,et,nu,g,cL,cEta,circ_p,FrXcoefs,Fr2_crt_PolyExtra)
-			# print("Fr2 - Fr2_crt {:.6e}".format(dif))
 			roots_list.append(root); num_roots += 1;
 	
 	num_seg=0; zp_seg=[]
@@ -436,10 +432,10 @@ def int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_
 			zp_seg.append((roots_list[i], roots_list[i+1]))
 	return num_seg, zp_seg
 ####################################################################
-def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector):
+def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zl_min,zl_max,Fr2_crt_PolyExtra,F_tab_NP,sector):
 	Reg,Bog,Weg,circ_p,n_lam,x,tau_vort=J_lambda_prep(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig)
 	# Figure out number of segments in integration
-	num_seg, zp_seg = int_seg_find(l,zlam_min,zlam_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra,sector)
+	num_seg, zp_seg = int_seg_find(l,zl_min,zl_max,kt,et,nu,cL,cEta,FrXcoefs,circ_p,g,Fr2_crt_PolyExtra,sector)
 	if num_seg == 0:
 		return 0
 	V_int = 0
@@ -458,13 +454,15 @@ def J_lambda(l,lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_l
 	J_lam=n_lam*PB*V_int/tau_vort
 	return J_lam
 ####################################################################
+# When lambda is too large the resulting Fr2 is too small and \
+# therefore results in unnecessary integral range.
 def max_lambda(kt,et,nu,g,cL,cEta,zlam_min,zlam_max,FrXcoefs,Fr2_crt_PolyExtra):
 	L=kt**1.5/et
-	if zlam_min>=2 and zlam_max <= 3:
+	if not(zlam_min<=2 or zlam_max >= 3):
 		return 100 * L # Too complicated
 	else:
 		lmax = 100 * L
-		if zlam_min<=2 and zlam_max >= 3:
+		if zlam_min<=2.57 and zlam_max >= 2.57:
 			zlam = 2.57
 		elif zlam_min >= 3:
 			zlam = zlam_min
@@ -476,13 +474,8 @@ def max_lambda(kt,et,nu,g,cL,cEta,zlam_min,zlam_max,FrXcoefs,Fr2_crt_PolyExtra):
 		for iloop in range(8):
 			Fr2_cr = Fr2_crit_getter(1,zlam,FrXcoefs,Fr2_crt_PolyExtra)*0.95
 			wz = get_rise_speed(lmax,zlam*lmax,kt,et,nu,cL,cEta,method=2)
-			# print("lmax: {:.5e}m, wz_oe: {:.4e}m/s, vel fluc: {:.4e}m/s".format(lmax,wz,(2/3*kt)**(1/2)))
 			ulam = sqrt(ulambda_sq(lmax,kt,et,cL,cEta,nu,pope_spec=1.01))
-			# lmax = sqrt(pi*pi*lmax**(4/3)*et**(1/3)*sqrt(2)*wz/g/Fr2_cr)
 			lmax = sqrt(pi*pi*lmax*ulam*wz/g/Fr2_cr)
-		# Fr2 = pi*pi*lmax*ulam*wz/g/lmax/lmax
-		# Fr2_approx = pi*pi*lmax**(4/3)*et**(1/3)*sqrt(2)*wz/g/lmax**2
-		# print("Fr2: {:.4e}, {:.4e}, Fr2_crt {:.4e}".format(Fr2,Fr2_approx,Fr2_cr))\
 		return lmax
 ####################################################################
 def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP,sector):
@@ -493,25 +486,26 @@ def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,zlam_min,zlam_max,wmeth,Fr2_crt
 	Fr2_lst=Table['flxfr_data']; zcoa_lst=Table['z_a_data']; F_tab=Table['F_lookuptable']
 	cL,cEta=findcLceta(kt,et,nu,mode=1)
 	# Note: for zp/lam > 6.751203194740859 the B is less than 0, therefore integrating over this point is meanning less.
-	zlam_max = min (6.751203194740859,zlam_max)
-	x1=sqrt(4*sig/rhoc/g); x2=sqrt(200*sig/rhoc/g); x4=max_lambda(kt,et,nu,g,cL,cEta,zlam_min,zlam_max,FrXcoefs,Fr2_crt_PolyExtra); # Lambda range
+	zl_min,zl_max=zl_sector(zlam_min,zlam_max,sector)
+	zl_max = min (6.751203194740859,zlam_max)
+	x1=sqrt(4*sig/rhoc/g); x2=sqrt(200*sig/rhoc/g); x4=max_lambda(kt,et,nu,g,cL,cEta,zl_min,zl_max,FrXcoefs,Fr2_crt_PolyExtra); # Lambda range
 	# For speed get a table of ulambda_square
 	nlst=400
-	# lst=logspace(-8,2,nlst);
 	lst=logspace(log10(x1),log10(x4),nlst);	ul2_lst=zeros(nlst) #with dimension!
 	for i in range(nlst):
 		ul2_lst[i]=ulambda_sq(lst[i],kt,et,cL,cEta,nu,pope_spec=1.01)
-	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector):
-		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector)*exp(u)
+	def intgrd(u,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zl_min,zl_max,Fr2_crt_PolyExtra,F_tab_NP,sector):
+		return J_lambda(exp(u),lst,ul2_lst,kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zl_min,zl_max,Fr2_crt_PolyExtra,F_tab_NP,sector)*exp(u)
 	J=quadrature(intgrd,  log(x1), log(x2),
-	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector),
+	             args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zl_min,zl_max,Fr2_crt_PolyExtra,F_tab_NP,sector),
 	             vec_func=False,maxiter=51,rtol=1e-3)[0] +\
 	quadrature(intgrd,  log(x2), log(x4),
-	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zlam_min,zlam_max,Fr2_crt_PolyExtra,F_tab_NP,sector),
+	            args=(kt,et,cL,cEta,nu,g,rhoc,sig,Refitcoefs,FrXcoefs,Fr2_lst,zcoa_lst,F_tab,zl_min,zl_max,Fr2_crt_PolyExtra,F_tab_NP,sector),
 	            vec_func=False,maxiter=52,rtol=1e-3)[0]
 	return J
 ####################################################################
-# These constans are pre-calculated
+# These constans are pre-calculate
+#region
 # @jit(nopython=True, cache=True, nogil=True)
 # def Fr2_crit_lst_getter_helper(FrXcoefs,Fr2_crt_PolyExtra):
 # 	if ~Fr2_crt_PolyExtra(): # Pre processing
@@ -530,6 +524,7 @@ def Jent_numerical_New(kt,et,nu,g,rhoc,sig,Table,zlam_min,zlam_max,wmeth,Fr2_crt
 # 	else:
 # 		zcoa_l = 0; base_l = 0; slope_l = 0; zcoa_r = 0; base_r = 0; slope_r = 0
 # 	return zcoa_l,base_l,slope_l,zcoa_r,base_r,slope_r
+#endregion
 def F_func_table_ext(Fr2_lst,Fr2_tgt,zcoa_lst,zcoa_tgt,F_tab,method,sector):
 	d1  = zcoa_tgt.size-1;	d2  = Fr2_tgt.size-1
 	d1o = zcoa_lst.size-1;	d2o = Fr2_lst.size-1

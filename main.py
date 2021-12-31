@@ -2,10 +2,12 @@ from numpy import array, zeros, linspace, loadtxt, interp, insert, savez, load, 
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 from Ent_body import Turb_entrainment
+from Plt_funcs import myax
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams["mathtext.fontset"] = "stix"
 fs=12
-
+import warnings
+warnings.filterwarnings("ignore")
 ####   EVERYTHING IS DIMENSIONAL   ####
 # Input parameters
 model = 2
@@ -21,7 +23,7 @@ sigma = 0.072;          Nt = 200
 g = 9.81
 z = linspace(0,zmax,Nx)   #Domain
 dt = Tend/Nt
-zlam_min = 0.5; zlam_max = 100000
+zlam_min = 2; zlam_max = 3
 ############################################################
 #Read groups info
 ds = loadtxt('groups.dat', skiprows=1)
@@ -188,7 +190,8 @@ print(" >> Fr2           dimension: {:}, range: {:}, {:}".format(Table['flxfr_da
 # ax3.set_xlim([min(z),max(z)])
 # ax3.set_ylim([0.0,20])
 #endregion
-# ======================================== Converge Validation ========================================
+# ***************************** Converge Validation *****************************
+#region
 # zlam_max_range=[3,6,12,24]
 # zlam_min_range=[1,   30, 100, 500, 2980]
 # zlam_max_range=[21,  50, 120, 520, 3000]
@@ -248,19 +251,27 @@ print(" >> Fr2           dimension: {:}, range: {:}, {:}".format(Table['flxfr_da
 # 		print("Src: {:.4e}, Sum: {:.4e}".format(Source_convg[irange][icheck], tmp))
 # 	else:
 # 		print("Src: {:.4e}".format(Source_convg[irange][icheck]))
-
-# ======================================== Contribution from each F segment ========================================
-zlam_min = 1; zlam_max = 6.75
+#endregion
+# ***************************** Contribution from each F segment *****************************
+zlam_min = 2; zlam_max = 3
 alpha_d_sec=[]
 Source_sec=[] # Note: Without void fraction correction
 Source_sec_corrected=[] # Note: With void fraction correction
-for isec in range(7):
+lgnd_str = []
+# for isec in range(7):
+sec_lst = array([0,2,5])
+for isec in sec_lst:
+	print("******** Calculating for Sector # {} ********\n".format(isec))
 	time, alpha_out4, alpha04, alpha_mid4, S4, VT, S_raw = \
 	Turb_entrainment(Nx,Nt,kt,et,g,rhoc,rhod,sigma,z,nuc,nut,G,D,Dg,dt,Sl0,Table,
 					 2,zlam_min,zlam_max,wmeth,Fr2_crt_PolyExtra,F_tab_NP,isec)
 	alpha_d_sec.append(alpha_out4)
 	Source_sec.append(S_raw)
 	Source_sec_corrected.append(S4)
+	if isec == 0:
+		lgnd_str.append(r"Sec all")
+	else:
+		lgnd_str.append(r"Sec{}".format(isec))
 #################################
 # =+=+=+=+= plot part =+=+=+=+= #
 #################################
@@ -273,35 +284,28 @@ listy_plate = ['--',':']
 fig_sec = plt.figure(figsize=(4, 3), dpi=300)
 axconvg = fig_sec.add_subplot(111)
 axconvg.set_title(plt_title)
+myax(axconvg, 'Depth [m]', r'$\alpha_d$ [%]', (min(z),  max(z)), (-1, 30), 'linear', 'linear')
 axconvg.plot(Terrill[0], Terrill[1], color='black',
-             linestyle='none', marker='o', ms=5, label='Terrill (2005)')
+             linestyle='none', marker='o', ms=5, label='Terrill (2005)')	# Exp data
 axconvg.plot(Johansen[0], Johansen[1], color='black', linestyle='none',
-             marker='o', mfc='none', ms=5, label='Johansen et al. (2010)')
-axconvg.set_xlabel('Depth [m]')
-axconvg.set_ylabel(r'$\alpha_d$ [%]')
-axconvg.set_xlim([min(z), max(z)])
-axconvg.set_ylim([-1, 30])
+             marker='o', mfc='none', ms=5, label='Johansen et al. (2010)')	# Exp data
 
 fig_sec_src = plt.figure(figsize=(4, 3), dpi=300)
 axconvg_src = fig_sec_src.add_subplot(111)
 axconvg_src.set_title(plt_title)
-axconvg_src.set_xlabel('Depth [m]')
-axconvg_src.set_ylabel(r'$S_{\alpha_d}$ [1/s]')
-axconvg_src.set_xlim([min(z), max(z)])
-axconvg_src.set_ylim([1e-2, 12]); axconvg_src.set_yscale('log')
-
+myax(axconvg_src, 'Depth [m]', r'$S_{\alpha_d}$ [1/s]', (min(z),  max(z)), (1e-2, 12), 'linear', 'log')
 axconvg.plot(z, alpha_d_sec[0][:, Nt-1]*100,
-              color='black', linestyle='-', label=r"All Sec")
+              color='black', linestyle='-', label=lgnd_str[0])
 axconvg_src.plot(z, Source_sec[0],
-			color='black', linestyle='-', label=r"All Sec", linewidth = 2)
+			color='black', linestyle='-', label=lgnd_str[0], linewidth = 2)
 
 Src_sum = zeros(len(Source_sec[0]))
-for isec in range(1,7):
+for isec in range(1,len(sec_lst)):
 	ic = mod((isec-1),3) ; il = int(floor((isec-1)/3))
 	axconvg.plot(z, alpha_d_sec[isec][:, Nt-1]*100,
-              color=color_plate[ic], linestyle=listy_plate[il], label=r"Sec {}".format(isec))
+              color=color_plate[ic], linestyle=listy_plate[il], label=lgnd_str[isec])
 	axconvg_src.plot(z, Source_sec[isec],
-              color=color_plate[ic], linestyle=listy_plate[il], label=r"Sec {}".format(isec))
+              color=color_plate[ic], linestyle=listy_plate[il], label=lgnd_str[isec])
 	Src_sum+=Source_sec[isec]
 	# axconvg_src.plot(z, Source_sec_corrected[isec],
     #           color=color_plate[ic], linestyle='--')
